@@ -44,7 +44,7 @@ export default function Home() {
 
   if(session) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <h1 className="text-2xl font-bold mb-4">Welcome Back!</h1>
         <p className="mb-4">You are already signed in as {session.user.name || session.user.email}.</p>
         <Button 
