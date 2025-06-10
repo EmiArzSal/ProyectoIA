@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { Alert, AlertTitle } from "@/components/ui/alert"
@@ -27,7 +26,6 @@ const formSchema = z.object({
 })
 
 export const SignInView = () => {
-  const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
@@ -43,12 +41,30 @@ export const SignInView = () => {
     setIsPending(true);
     authClient.signIn.email({
       email: data.email,
-      password: data.password
+      password: data.password,
+      callbackURL: "/"
     },
     {
       onSuccess: () => {
         setIsPending(false);
-        router.push("/");
+      },
+      onError: ({error}) => {
+        setError(error.message);
+      }
+    }
+  );
+}
+
+const onSocial = (provider: "github" | "google") => {
+    setError(null);
+    setIsPending(true);
+    authClient.signIn.social({
+      provider: provider,
+      callbackURL: "/"
+    },
+    {
+      onSuccess: () => {
+        setIsPending(false);
       },
       onError: ({error}) => {
         setError(error.message);
@@ -115,10 +131,10 @@ export const SignInView = () => {
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Button variant="outline" type="button" className="w-full">
+                  <Button variant="outline" type="button" className="w-full" onClick={() => onSocial("google")}>
                     Google
                   </Button>
-                  <Button variant="outline" type="button" className="w-full">
+                  <Button variant="outline" type="button" className="w-full" onClick={() => onSocial("github")}>
                     Github
                   </Button>
                 </div>
@@ -131,7 +147,7 @@ export const SignInView = () => {
           </Form>
 
           <div className="bg-radial from-background to-primary relative hidden md:flex flex-col items-center justify-center gap-y-4">
-            <img src="/logocustom.svg" alt="Logo Image" className="h-[92px] w-[92px]"/>
+            <img src="/logo.png" alt="Logo Image" className="h-[110px] w-[110px]"/>
             <p className="text-2xl font-bold text-text">
               AGORA
             </p>
