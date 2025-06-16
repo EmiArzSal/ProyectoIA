@@ -6,9 +6,11 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { useState } from "react"
 import { authClient } from "@/lib/auth-client"
+import { FaGithub, FaGoogle } from "react-icons/fa"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { OctagonAlertIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -32,6 +34,7 @@ const formSchema = z.object({
 })
 
 export const SignUpView = () => {
+  const router = useRouter(); 
   const [error, setError] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false);
   const form = useForm<z.infer<typeof formSchema>>({
@@ -47,6 +50,7 @@ export const SignUpView = () => {
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setError(null);
     setIsPending(true);
+
     authClient.signUp.email({
       name: data.name,
       email: data.email,
@@ -56,6 +60,7 @@ export const SignUpView = () => {
     {
       onSuccess: () => {
         setIsPending(false);
+        router.push("/");
       },
       onError: ({error}) => {
         setError(error.message);
@@ -171,10 +176,10 @@ export const SignUpView = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Button variant="outline" type="button" className="w-full" onClick={() => onSocial("google")}>
-                    Google
+                    <FaGoogle/>
                   </Button>
                   <Button variant="outline" type="button" className="w-full" onClick={() => onSocial("github")}>
-                    Github
+                    <FaGithub/>
                   </Button>
                 </div>
                 <div className="text-center text-sm">
