@@ -190,7 +190,7 @@ export const SignUpView = () => {
             </form>
           </Form>
 
-          <div className="bg-radial from-background to-primary relative hidden md:flex flex-col items-center justify-center gap-y-4">
+          <div className="bg-radial from-sidebar to-sidebar-accent relative hidden md:flex flex-col items-center justify-center gap-y-4">
             <img src="/logo.png" alt="Logo Image" className="h-[112px] w-[112px]"/>
             <p className="text-2xl font-bold text-text">
               AGORA
