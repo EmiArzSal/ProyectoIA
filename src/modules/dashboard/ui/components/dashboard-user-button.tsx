@@ -8,16 +8,28 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { 
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer';
 import { Avatar, AvatarImage } from '@/components/ui/avatar';
 import { GeneratedAvatar } from '@/components/ui/generated-avatar';
 import { ChevronDownIcon, LogOutIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Button } from '@/components/ui/button';
 
 export const DashboardUserButton = () => {
   const router = useRouter();
   const { data, isPending } = authClient.useSession();
   const userName = data?.user?.name ?? 'Usuario';
   const userEmail = data?.user?.email ?? 'unknown@email.com';
+  const isMobile = useIsMobile();
   const onLogout = () => {
     authClient.signOut({
       fetchOptions: {
@@ -30,6 +42,41 @@ export const DashboardUserButton = () => {
   }
   if(isPending || !data?.user){
     return null;
+  }
+  if(isMobile){
+    return(
+      <Drawer>
+        <DrawerTrigger className='rounded-lg border border-border/10 p-3 w-full flex items-center justify-between overflow-hidden bg-black/5 hover:bg-black/10'>
+            {data.user.image ? (
+            <Avatar>
+              <AvatarImage src={data.user.image}/>
+            </Avatar>
+          ) : (
+            <GeneratedAvatar seed={userName} variant='initials' className='size-9 mr-3' />
+          )}
+          <div className='flex flex-col gap-0.5 text-left overflow-hidden flex-1 min-w-0 ml-2'>
+            <p className='text-sm truncate w-full font-semibold text-foreground'>
+              {userName}
+            </p>
+            <p className='text-xs truncate w-full text-muted-foreground'>
+              {userEmail}
+            </p>
+          </div>
+          <ChevronDownIcon className='size-4 shrink-0'/>
+        </DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>{userName}</DrawerTitle>
+            <DrawerDescription>{userEmail}</DrawerDescription>
+          </DrawerHeader>
+          <DrawerFooter>
+            <Button variant='outline' onClick={onLogout}>
+              Logout
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    )
   }
   return (
     <DropdownMenu>
