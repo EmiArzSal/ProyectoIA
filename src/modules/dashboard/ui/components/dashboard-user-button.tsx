@@ -16,6 +16,8 @@ import { useRouter } from 'next/navigation';
 export const DashboardUserButton = () => {
   const router = useRouter();
   const { data, isPending } = authClient.useSession();
+  const userName = data?.user?.name ?? 'Usuario';
+  const userEmail = data?.user?.email ?? 'unknown@email.com';
   const onLogout = () => {
     authClient.signOut({
       fetchOptions: {
@@ -37,14 +39,14 @@ export const DashboardUserButton = () => {
               <AvatarImage src={data.user.image}/>
             </Avatar>
           ) : (
-            <GeneratedAvatar seed={data.user.name} variant='initials' className='size-9 mr-3' />
+            <GeneratedAvatar seed={userName} variant='initials' className='size-9 mr-3' />
           )}
           <div className='flex flex-col gap-0.5 text-left overflow-hidden flex-1 min-w-0 ml-2'>
             <p className='text-sm truncate w-full font-semibold text-foreground'>
-              {data.user.name}
+              {userName}
             </p>
             <p className='text-xs truncate w-full text-muted-foreground'>
-              {data.user.email}
+              {userEmail}
             </p>
           </div>
           <ChevronDownIcon className='size-4 shrink-0'/>
@@ -52,9 +54,9 @@ export const DashboardUserButton = () => {
       <DropdownMenuContent align='end' side='right' className='w-72'>
         <DropdownMenuLabel>
           <div className='flex flex-col gap-1'>
-            <span className='font-medium truncate'>{data.user.name}</span>
+            <span className='font-medium truncate'>{userName}</span>
             <span className='text-sm text-normal truncate text-muted-foreground'>
-              {data.user.email}
+              {userEmail}
             </span>
           </div>
         </DropdownMenuLabel>

@@ -59,7 +59,7 @@ function DashboardSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
               {firstSection.map((item) => {
-                const isActive = pathname === item.href
+                const isActive = pathname.startsWith(item.href)
                 return(
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild className={cn("group relative h-14 px-4 rounded-xl transition-all duration-300 hover:shadow-md",
@@ -104,7 +104,7 @@ function DashboardSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="space-y-2">
               {secondSection.map((item) => {
-                const isActive = pathname === item.href
+                const isActive = pathname.startsWith(item.href)
                 return(
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild className={cn("group relative h-14 px-4 rounded-xl transition-all duration-300 hover:shadow-md",
