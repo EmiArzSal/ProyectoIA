@@ -5,16 +5,25 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { useTRPC } from "@/trpc/client";
 import { LoadingState } from "@/components/loading-state";
 import { ErrorState } from "@/components/error-state";
-
-
+import { EmptyState } from "@/components/empty-state";
+import { DataTable } from "../components/data-table";
+import { columns} from "../components/columns";
 
 export const AgentsView = () => {
   const  trpc  = useTRPC();
-  const { data,  } = useSuspenseQuery(trpc.agents.getMany.queryOptions());
+  const { data } = useSuspenseQuery(trpc.agents.getMany.queryOptions());
 
   return (
-    <div>
-      {JSON.stringify(data, null, 2)}
+    <div className="flex-1 p-4 px-4 md:px-8 flex flex-col gap-y-4">
+      <DataTable data={data} columns={columns}/>
+      {data.length === 0 &&(
+        <EmptyState
+        title="Crea tu primer agente"
+        description="Crea un agente para unirte a tus sesiones. Cada agente seguirá tus 
+        instrucciones"
+        />
+
+      )}
     </div>
   );
 };
