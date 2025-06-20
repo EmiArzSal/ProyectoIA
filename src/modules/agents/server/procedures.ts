@@ -58,7 +58,6 @@ export const agentsRouter = createTRPCRouter({
               //TODO: Change to actual count
               meetingCount: sql<number>`5`,
               ...getTableColumns(agents),
-
             })
             .from(agents)
             .where(and
