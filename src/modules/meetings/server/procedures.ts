@@ -106,13 +106,13 @@ export const meetingsRouter = createTRPCRouter({
         search: z.string().nullish(),
         agentId: z.string().nullish(),
         status: z
-           .enum([
-             MeetingStatus.Upcoming,
-             MeetingStatus.Active,
-             MeetingStatus.Completed,
-             MeetingStatus.Processing,
-             MeetingStatus.Cancelled,
-           ])
+          .enum([
+              MeetingStatus.Próximo,
+              MeetingStatus.Activo,
+              MeetingStatus.Completado,
+              MeetingStatus.Procesando,
+              MeetingStatus.Cancelado,
+          ])
           .nullish(),
       })
     )
@@ -131,7 +131,7 @@ export const meetingsRouter = createTRPCRouter({
               and(
                 eq(meetings.userId, ctx.auth.user.id),
                 search ? ilike(meetings.name, `%${search}%`) : undefined,
-                status ? eq(meetings.status, status): undefined,
+                status ? eq(meetings.status, status as any): undefined,
                 agentId ? eq(meetings.agentId, agentId): undefined,
               )
             )
@@ -147,7 +147,7 @@ export const meetingsRouter = createTRPCRouter({
           and(
             eq(meetings.userId, ctx.auth.user.id),
             search ? ilike(meetings.name, `%${search}%`) : undefined,
-            status ? eq(meetings.status, status): undefined,
+            status ? eq(meetings.status, status as any): undefined,
             agentId ? eq(meetings.agentId, agentId): undefined,
           )
         );

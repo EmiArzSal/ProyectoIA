@@ -14,52 +14,52 @@ import { useMeetingsFilters } from "../../hooks/use-meetings-filters";
 
 const options = [
    {
-     id: MeetingStatus.Upcoming,
-     value: MeetingStatus.Upcoming,
+     id: MeetingStatus.Próximo,
+     value: MeetingStatus.Próximo,
      children:(
         <div className="flex items-center gap-x-2 capitalize">
          <ClockArrowUpIcon/>
-          {MeetingStatus.Upcoming}
+          {MeetingStatus.Próximo}
         </div>
      )
    },
    {
-    id:MeetingStatus.Completed,
-    value: MeetingStatus.Completed,
+    id:MeetingStatus.Completado,
+    value: MeetingStatus.Completado,
     children:(
         <div className="flex items-center gap-x-2 capitalize">
         <CircleCheckIcon/>
-        {MeetingStatus.Completed}
+        {MeetingStatus.Completado}
         </div>
     ),
  },
     {
-    id:MeetingStatus.Active,
-    value: MeetingStatus.Active,
+    id:MeetingStatus.Activo,
+    value: MeetingStatus.Activo,
     children:(
         <div className="flex items-center gap-x-2 capitalize">
         <VideoIcon/>
-        {MeetingStatus.Active}
+        {MeetingStatus.Activo}
         </div>
     ),
  },
  {
-    id:MeetingStatus.Processing,
-    value: MeetingStatus.Processing,
+    id:MeetingStatus.Procesando,
+    value: MeetingStatus.Procesando,
     children:(
         <div className="flex items-center gap-x-2 capitalize">
         <LoaderIcon/>
-        {MeetingStatus.Processing}
+        {MeetingStatus.Procesando}
         </div>
     ),
  },
  {
-    id:MeetingStatus.Cancelled,
-    value: MeetingStatus.Cancelled,
+    id:MeetingStatus.Cancelado,
+    value: MeetingStatus.Cancelado,
     children:(
         <div className="flex items-center gap-x-2 capitalize">
         <CircleXIcon/>
-        {MeetingStatus.Cancelled}
+        {MeetingStatus.Cancelado}
         </div>
     ),
  },
