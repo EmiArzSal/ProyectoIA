@@ -9,6 +9,7 @@ import { TRPCError } from "@trpc/server";
 import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
 import { streamVideo } from "@/lib/stream-video";
 import { generateAvatarUri } from "@/lib/avatar";
+import { MeetingStatus } from "../types";
 
 export const meetingsRouter = createTRPCRouter({
   generateToken: protectedProcedure.mutation(async ({ctx}) => {
@@ -34,9 +35,7 @@ export const meetingsRouter = createTRPCRouter({
     );
     return token;
   }),
-import { MeetingStatus } from "../types";
 
-export const meetingsRouter = createTRPCRouter({
   remove: protectedProcedure
     .input(z.object({id : z.string()}))
     .mutation(async ({input, ctx}) => {
@@ -130,7 +129,7 @@ export const meetingsRouter = createTRPCRouter({
           id: existingAgent.id,
           name: existingAgent.name,
           role: "user",
-          image: generateAvatarUri({seed: existingAgent.name, variant: "bottts"})
+          image: generateAvatarUri({seed: existingAgent.name, variant: "botttsNeutral"})
         }
       ]);
       return createdMeeting;
@@ -176,11 +175,11 @@ export const meetingsRouter = createTRPCRouter({
         agentId: z.string().nullish(),
         status: z
           .enum([
-              MeetingStatus.Próximo,
-              MeetingStatus.Activo,
-              MeetingStatus.Completado,
-              MeetingStatus.Procesando,
-              MeetingStatus.Cancelado,
+              MeetingStatus.Upcoming,
+              MeetingStatus.Active,
+              MeetingStatus.Completed,
+              MeetingStatus.Processing,
+              MeetingStatus.Cancelled,
           ])
           .nullish(),
       })
