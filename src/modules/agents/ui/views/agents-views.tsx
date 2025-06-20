@@ -56,7 +56,7 @@ export const AgentsViewLoading = () => {
 
 export const AgentsViewError = () => {
   return (
-     <ErrorState
+      <ErrorState
           title="Error al cargar agentes"
           description="Intenta de nuevo más tarde"
         />
