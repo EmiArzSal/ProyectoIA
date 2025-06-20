@@ -98,58 +98,58 @@ interface AgentFormProps {
       }
    };
    return(
-      <Form{...form}>
-       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
-         <GeneratedAvatar
-          seed={form.watch("name")}
-          variant="botttsNeutral"
-          className="border size-16"
-         />
-          <FormField
-          name="name"
-          control={form.control}
-          render={({ field }) => (
-            <FormItem>
-            <FormLabel>Nombre</FormLabel>
-             <FormControl>
-               <Input {...field} placeholder="e.j. Agente de Análisis Vectorial"/>
-             </FormControl>
-             <FormMessage/>
-            </FormItem>
-          )}
-          />
-          <FormField
-          name="instructions"
-          control={form.control}
-          render={({ field }) => (
-            <FormItem>
-            <FormLabel>Instrucciones</FormLabel>
-             <FormControl>
-               <Textarea
-                {...field} placeholder="Puedes ayudarme con esta Tarea."/>
-             </FormControl>
-             <FormMessage/>
-            </FormItem>
-          )}
-          />
-          <div className="flex justify-between gapx-2">
-            {onCancel && (
-              <Button
-              variant="ghost"
-              disabled={isPending}
-              type="button"
-              onClick={()=>onCancel()}
-              >
-                Cancelar
-
-              </Button>
+         <Form{...form}>
+         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+            <GeneratedAvatar
+            seed={form.watch("name")}
+            variant="botttsNeutral"
+            className="border size-16"
+            />
+            <FormField
+            name="name"
+            control={form.control}
+            render={({ field }) => (
+               <FormItem>
+               <FormLabel>Nombre</FormLabel>
+               <FormControl>
+                  <Input {...field} placeholder="e.j. Agente de Análisis Vectorial"/>
+               </FormControl>
+               <FormMessage/>
+               </FormItem>
             )}
-            <Button disabled={isPending} type="submit">
-              {isEdit ? "Update" : "Crear"}
-            </Button>
-          </div>
-         </form>
-      </Form>
+            />
+            <FormField
+            name="instructions"
+            control={form.control}
+            render={({ field }) => (
+               <FormItem>
+               <FormLabel>Instrucciones</FormLabel>
+               <FormControl>
+                  <Textarea
+                  {...field} placeholder="Puedes ayudarme con esta Tarea."/>
+               </FormControl>
+               <FormMessage/>
+               </FormItem>
+            )}
+            />
+            <div className="flex justify-between gapx-2">
+               {onCancel && (
+               <Button
+               variant="ghost"
+               disabled={isPending}
+               type="button"
+               onClick={()=>onCancel()}
+               >
+                  Cancelar
+
+               </Button>
+               )}
+               <Button disabled={isPending} type="submit">
+               {isEdit ? "Update" : "Crear"}
+               </Button>
+            </div>
+            </form>
+         </Form>
    );
 
 };
