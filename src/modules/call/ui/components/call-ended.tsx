@@ -20,7 +20,7 @@ export const CallEnded = () => {
               El resumen de esta sesión aparecerá en unos minutos.
             </p>
           </div>
-          <Button variant="outline" asChild>
+          <Button variant="default" asChild>
             <Link href="/meetings">
               Volver a mis sesiones
             </Link>

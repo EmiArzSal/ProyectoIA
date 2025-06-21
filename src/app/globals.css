@@ -75,7 +75,7 @@
   --secondary-foreground: #ffffff;
 
   /* Accent - Innovation purple, represents creativity and AI */
-  --accent: #8b5cf6;
+  --accent: #c5c5c5;
   --accent-foreground: #ffffff;
 
   /* Background & Surface Colors */
@@ -131,11 +131,12 @@
   --primary-foreground: #0f172a;
 
   /* Secondary - Brighter green for dark backgrounds */
-  --secondary: #34d399;
+  --secondary: #84c2ad;
   --secondary-foreground: #0f172a;
 
   /* Accent - Lighter purple for visibility */
   --accent: #a78bfa;
+  --accent-buttons: #c5c5c5 
   --accent-foreground: #0f172a;
 
   /* Background & Surface Colors */
