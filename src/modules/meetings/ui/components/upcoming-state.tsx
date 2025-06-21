@@ -22,7 +22,7 @@ export const UpcomingState = ({ meetingId, onCancelMeeting, isCancelling }: Prop
           <BanIcon/>
           Cancelar reunión
         </Button>
-        <Button variant="secondary" size="icon" className="w-full lg:w-auto" disabled={isCancelling} asChild>
+        <Button variant="default" size="icon" className="w-full lg:w-auto" disabled={isCancelling} asChild>
           <Link href={`/call/${meetingId}`}>
             <VideoIcon/>
             Iniciar reunión
