@@ -54,11 +54,7 @@ export const CallConnect = ({ meetingId, meetingName, userId, userName, userImag
     _call.microphone.disable();
     setCall(_call);
     return () => {
-      if(_call.state.callingState === CallingState.LEFT){
-        _call.leave();
-        _call.endCall();
-        setCall(undefined);
-      }
+      _call.endCall();
       setCall(undefined);
     };
   }, [client, meetingId]);
