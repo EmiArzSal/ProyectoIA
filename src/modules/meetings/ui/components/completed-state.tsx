@@ -11,6 +11,8 @@ import { format, formatISODuration } from "date-fns";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { formatDuration } from "@/lib/utils";
+import { Transcript } from "./transcript";
+import { ChatProvider } from "./chat-provider";
 
 interface Props{
   data: MeetingGetOne
@@ -55,6 +57,12 @@ export const CompletedState = ({ data }: Props) => {
             <ScrollBar orientation="horizontal" />
           </ScrollArea>
         </div>
+        <TabsContent value="chat">
+          <ChatProvider meetingId={data.id} meetingName={data.name} />
+        </TabsContent>
+        <TabsContent value="transcript">
+          <Transcript meetingId={data.id} />
+        </TabsContent>
         <TabsContent value="recording">
           <div className="bg-white rounded-lg border px-4 py-5">
             <video 
