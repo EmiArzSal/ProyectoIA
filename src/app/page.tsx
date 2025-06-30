@@ -8,17 +8,19 @@ export default async function HomePage() {
       headers: await headers(),
     });
 
+    // Si hay sesión, ir directamente al dashboard
     if (session) {
-      // Si el usuario está autenticado, redirigir al dashboard
       redirect("/dashboard");
-    } else {
-      // Si no está autenticado, redirigir al sign-in
-      redirect("/sign-in");
     }
+    
+    // Si no hay sesión, ir al sign-in
+    redirect("/sign-in");
+    
   } catch (error) {
-    // Si hay un error en la autenticación (ej: variables de entorno no configuradas)
-    // redirigir al sign-in como fallback
     console.error("Error checking session:", error);
+    
+    // En caso de error, ir al sign-in como fallback seguro
+    // Esto evita bucles infinitos si hay problemas con la base de datos o autenticación
     redirect("/sign-in");
   }
 } 
