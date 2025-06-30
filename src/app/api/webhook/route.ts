@@ -9,7 +9,7 @@ import {
   CallSessionStartedEvent,
 
 } from "@stream-io/node-sdk";
-import { and, eq, not, or } from "drizzle-orm";
+import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { agents, meetings } from "@/db/schema";

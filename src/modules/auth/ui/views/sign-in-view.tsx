@@ -21,6 +21,7 @@ import {
   FormMessage
 } from "@/components/ui/form"
 import Link from "next/link"
+import Image from "next/image"
 
 const formSchema = z.object({
   email: z.string().email(),
@@ -151,7 +152,7 @@ const onSocial = (provider: "github" | "google") => {
           </Form>
 
           <div className="bg-radial from-sidebar to-sidebar-accent relative hidden md:flex flex-col items-center justify-center gap-y-4">
-            <img src="/logo.png" alt="Logo Image" className="h-[110px] w-[110px]"/>
+            <Image src="/logo.png" alt="Logo Image" width={110} height={110}/>
             <p className="text-2xl font-bold text-text">
               AGORA
             </p>

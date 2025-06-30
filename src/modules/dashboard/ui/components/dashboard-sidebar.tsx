@@ -13,7 +13,7 @@ import {
   SidebarMenuItem
 } from '@/components/ui/sidebar'
 import { DashboardUserButton } from './dashboard-user-button'
-import { BotIcon, ChevronRight, Icon, StarIcon, VideoIcon } from 'lucide-react'
+import { BotIcon, StarIcon, VideoIcon, LayoutDashboardIcon } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
@@ -21,6 +21,11 @@ import { Separator } from '@/components/ui/separator'
 import { usePathname } from 'next/navigation'
 
 const firstSection = [
+  {
+    icon: LayoutDashboardIcon,
+    label: 'Dashboard',
+    href: '/dashboard'
+  },
   {
     icon: VideoIcon,
     label: 'Sesiones',
@@ -76,7 +81,7 @@ function DashboardSidebar() {
                               "p-2.5 rounded-lg transition-all duration-300",
                               "hover:text-accent",
                               isActive && "from-primary/30 to-secondary/30")}>
-                        <item.icon className={cn("size-5 transition-all duration-300",isActive ? "text-accent" : "text-muted-foreground"
+                        <item.icon className={cn("size-5 transition-all duration-300",isActive ? "text-primary" : "text-muted-foreground"
                         )}/>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -121,7 +126,7 @@ function DashboardSidebar() {
                               "p-2.5 rounded-lg transition-all duration-300",
                               "hover:text-accent",
                               isActive && "from-primary/30 to-secondary/30")}>
-                        <item.icon className={cn("size-5 transition-all duration-300",isActive ? "text-accent" : "text-muted-foreground"
+                        <item.icon className={cn("size-5 transition-all duration-300",isActive ? "text-primary" : "text-muted-foreground"
                         )}/>
                       </div>
                       <div className="flex-1 min-w-0">

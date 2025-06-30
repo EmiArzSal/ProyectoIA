@@ -1,10 +1,16 @@
-import { Dispatch, SetStateAction } from 'react';
 import {
   CommandResponsiveDialog,
   CommandInput,
   CommandItem,
-  CommandList
+  CommandList,
+  CommandGroup,
+  CommandEmpty
  } from '@/components/ui/command';
+import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
+import { Dispatch, SetStateAction, useState } from 'react';
+import { useTRPC } from '@/trpc/client';
+import { GeneratedAvatar } from '@/components/ui/generated-avatar';
 
 
 interface Props{
@@ -13,15 +19,71 @@ interface Props{
 }
 
 export const DashboardCommand = ({ open, setOpen }: Props) => {
+  const router = useRouter();
+  const [search, setSearch] = useState('');
+
+  const trpc = useTRPC();
+  const meetings = useQuery(
+    trpc.meetings.getMany.queryOptions({
+      search,
+      pageSize: 100,
+    })
+  );
+  const agents = useQuery(
+    trpc.agents.getMany.queryOptions({
+      search,
+      pageSize: 100,
+    })
+  );
   return (
-    <CommandResponsiveDialog open={open} onOpenChange={setOpen}>
+    <CommandResponsiveDialog shouldFilter={false} open={open} onOpenChange={setOpen}>
       <CommandInput 
-        placeholder='Encuentra una sesión o un agente'
+        placeholder='Encuentra una sesión o un agente...'
+        value={search}
+        onValueChange={(value) => setSearch(value)}
       />
       <CommandList>
-        <CommandItem>
-          Test
-        </CommandItem>
+        <CommandGroup heading='Sesiones'>
+          <CommandEmpty>
+            <span className='text-sm text-muted-foreground'>
+              No se encontraron sesiones
+            </span>
+          </CommandEmpty>
+          {meetings.data?.items.map((meeting) => (
+            <CommandItem 
+              onSelect={() => {
+                router.push(`/meetings/${meeting.id}`);
+                setOpen(false);
+              }}
+              key={meeting.id}
+            >
+              {meeting.name}
+            </CommandItem>
+          ))}
+        </CommandGroup>
+        <CommandGroup heading='Agentes'>
+          <CommandEmpty>
+            <span className='text-sm text-muted-foreground'>
+              No se encontraron agentes
+            </span>
+          </CommandEmpty>
+          {agents.data?.items.map((agent) => (
+            <CommandItem 
+              onSelect={() => {
+                router.push(`/agentes/${agent.id}`);
+                setOpen(false);
+              }}
+              key={agent.id}
+            >
+              <GeneratedAvatar
+                seed={agent.name}
+                variant="botttsNeutral"
+                className="size-5"
+              />
+              {agent.name}
+            </CommandItem>
+          ))}
+        </CommandGroup>
       </CommandList>
     </CommandResponsiveDialog>
   )

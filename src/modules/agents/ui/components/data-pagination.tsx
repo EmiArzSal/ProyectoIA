@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 
 interface Props{
   page: number;
