@@ -2,12 +2,11 @@
 import { MeetingGetOne } from "../../types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BookOpenTextIcon, SparklesIcon, FileTextIcon, FileVideoIcon, ClockFadingIcon } from "lucide-react";
 import Markdown from "react-markdown"
 import Link from "next/link";
 import { GeneratedAvatar } from "@/components/ui/generated-avatar";
-import { format, formatISODuration } from "date-fns";
+import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { formatDuration } from "@/lib/utils";

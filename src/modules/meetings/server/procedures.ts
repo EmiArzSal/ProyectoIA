@@ -14,6 +14,94 @@ import JSONL from "jsonl-parse-stringify";
 import { streamChat } from "@/lib/stream-chat";
 
 export const meetingsRouter = createTRPCRouter({
+  getStats: protectedProcedure.query(async ({ctx}) => {
+    // Total de sesiones
+    const [totalMeetings] = await db
+      .select({count: count()})
+      .from(meetings)
+      .where(eq(meetings.userId, ctx.auth.user.id));
+
+    // Sesiones completadas
+    const [completedMeetings] = await db
+      .select({count: count()})
+      .from(meetings)
+      .where(and(
+        eq(meetings.userId, ctx.auth.user.id),
+        eq(meetings.status, "completed")
+      ));
+
+    // Agentes activos (que tienen al menos una sesión)
+    const [activeAgents] = await db
+      .select({count: count()})
+      .from(agents)
+      .where(and(
+        eq(agents.userId, ctx.auth.user.id),
+        sql`EXISTS (
+          SELECT 1 FROM ${meetings} 
+          WHERE ${meetings.agentId} = ${agents.id}
+        )`
+      ));
+
+    // Tiempo total (suma de duraciones de sesiones completadas)
+    const [totalTimeResult] = await db
+      .select({
+        totalSeconds: sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - started_at))), 0)`
+      })
+      .from(meetings)
+      .where(and(
+        eq(meetings.userId, ctx.auth.user.id),
+        eq(meetings.status, "completed"),
+        sql`ended_at IS NOT NULL AND started_at IS NOT NULL`
+      ));
+
+    // Sesiones esta semana
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    const [thisWeekMeetings] = await db
+      .select({count: count()})
+      .from(meetings)
+      .where(and(
+        eq(meetings.userId, ctx.auth.user.id),
+        sql`created_at >= ${oneWeekAgo}`
+      ));
+
+    // Agentes este mes
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    const [thisMonthAgents] = await db
+      .select({count: count()})
+      .from(agents)
+      .where(and(
+        eq(agents.userId, ctx.auth.user.id),
+        sql`created_at >= ${oneMonthAgo}`
+      ));
+
+    // Tiempo esta semana
+    const [thisWeekTimeResult] = await db
+      .select({
+        totalSeconds: sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - started_at))), 0)`
+      })
+      .from(meetings)
+      .where(and(
+        eq(meetings.userId, ctx.auth.user.id),
+        eq(meetings.status, "completed"),
+        sql`ended_at IS NOT NULL AND started_at IS NOT NULL`,
+        sql`created_at >= ${oneWeekAgo}`
+      ));
+
+    return {
+      totalMeetings: totalMeetings.count,
+      completedMeetings: completedMeetings.count,
+      activeAgents: activeAgents.count,
+      totalTimeSeconds: totalTimeResult.totalSeconds || 0,
+      thisWeekMeetings: thisWeekMeetings.count,
+      thisMonthAgents: thisMonthAgents.count,
+      thisWeekTimeSeconds: thisWeekTimeResult.totalSeconds || 0,
+    };
+  }),
+
   generateChatToken: protectedProcedure.mutation(async ({ctx}) => {
     const token = streamChat.createToken(ctx.auth.user.id);
     await streamChat.upsertUser({
@@ -284,7 +372,7 @@ export const meetingsRouter = createTRPCRouter({
               and(
                 eq(meetings.userId, ctx.auth.user.id),
                 search ? ilike(meetings.name, `%${search}%`) : undefined,
-                status ? eq(meetings.status, status as any): undefined,
+                status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled"): undefined,  
                 agentId ? eq(meetings.agentId, agentId): undefined,
               )
             )
@@ -300,7 +388,7 @@ export const meetingsRouter = createTRPCRouter({
           and(
             eq(meetings.userId, ctx.auth.user.id),
             search ? ilike(meetings.name, `%${search}%`) : undefined,
-            status ? eq(meetings.status, status as any): undefined,
+            status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled"): undefined,
             agentId ? eq(meetings.agentId, agentId): undefined,
           )
         );

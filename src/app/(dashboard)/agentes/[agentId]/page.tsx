@@ -18,7 +18,7 @@ export default async function Page({ params }: Props) {
   const dehydratedState = dehydrate(queryClient);
 
   return (
-    <HydrationBoundary state={dehydrate(queryClient)}>
+    <HydrationBoundary state={dehydratedState}>
       <Suspense fallback={<AgentsIdViewLoading />}>
         <ErrorBoundary fallback={<AgentsIdViewError />}>
           <AgentIdView agentId={agentId}/>
