@@ -29,8 +29,8 @@ export const MeetingIdViewHeader = ({ meetingId, meetingName, onEdit, onRemove }
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink asChild className="font-medium text-xl">
-                <Link href="/agentes">
-                  Mis Sesiones
+                <Link href="/meetings">
+                  Historial
                 </Link>
               </BreadcrumbLink>
             </BreadcrumbItem>

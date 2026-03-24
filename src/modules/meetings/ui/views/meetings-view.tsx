@@ -33,8 +33,8 @@ export const MeetingsView = () => {
       />
       {data.items.length === 0 &&(
         <EmptyState
-        title="Crea tu primera sesión"
-        description="Programa una sesión con un agente. Cada sesión te permitirá practicar tus habilidades."
+        title="Sin entrevistas registradas"
+        description="Cuando completes una entrevista de práctica, aparecerá aquí con su resumen."
         />
 
       )}
@@ -45,7 +45,7 @@ export const MeetingsView = () => {
 export const MeetingsViewLoading = () => {
   return (
       <LoadingState
-        title="Cargando sesiones"
+        title="Cargando entrevistas"
         description="Esto puede tomar unos segundos"
       />
     
@@ -55,7 +55,7 @@ export const MeetingsViewLoading = () => {
 export const MeetingsViewError = () => {
   return (
       <ErrorState
-          title="Error al cargar sesiones"
+          title="Error al cargar entrevistas"
           description="Intenta de nuevo más tarde"
         />
   );

@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   VideoIcon, 
-  MessageSquareIcon, 
-  UsersIcon, 
   CalendarIcon,
-  SparklesIcon,
   TrendingUpIcon,
   ClockIcon,
   CheckCircleIcon
@@ -47,39 +44,23 @@ export const HomeView = () => {
       <div className="flex flex-col gap-y-2">
         <h1 className="text-3xl font-bold">¡Bienvenido a Agora!</h1>
         <p className="text-muted-foreground">
-          Gestiona tus sesiones inteligentes y obtén insights valiosos con la ayuda de la IA
+          Prepárate para entrevistas técnicas en inglés y mejora tus habilidades en IT
         </p>
       </div>
 
       {/* Acciones rápidas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
           <Link href="/meetings">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-x-2">
                 <VideoIcon className="size-5 text-blue-600" />
-                <CardTitle className="text-lg">Nueva Sesión</CardTitle>
+                <CardTitle className="text-lg">Nueva Entrevista IT</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Crea una nueva sesión con tu agente de IA personalizado
-              </CardDescription>
-            </CardContent>
-          </Link>
-        </Card>
-
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <Link href="/agentes">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-x-2">
-                <UsersIcon className="size-5 text-green-600" />
-                <CardTitle className="text-lg">Mis Agentes</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <CardDescription>
-                Gestiona y personaliza tus asistentes de IA
+                Practica entrevistas técnicas en inglés con nuestros entrevistadores especializados
               </CardDescription>
             </CardContent>
           </Link>
@@ -90,28 +71,28 @@ export const HomeView = () => {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-x-2">
                 <CalendarIcon className="size-5 text-purple-600" />
-                <CardTitle className="text-lg">Sesiones</CardTitle>
+                <CardTitle className="text-lg">Mis Entrevistas</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Revisa el historial y resultados de tus sesiones
+                Revisa tus entrevistas completadas, retroalimentación y progreso
               </CardDescription>
             </CardContent>
           </Link>
         </Card>
 
         <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <Link href="/meetings">
+          <Link href="/corrections">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-x-2">
-                <MessageSquareIcon className="size-5 text-orange-600" />
-                <CardTitle className="text-lg">Chat IA</CardTitle>
+                <CheckCircleIcon className="size-5 text-green-600" />
+                <CardTitle className="text-lg">Correcciones</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Continúa conversando con tus asistentes
+                Accede a las correcciones y mejoras sugeridas en tus entrevistas
               </CardDescription>
             </CardContent>
           </Link>
@@ -122,7 +103,7 @@ export const HomeView = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Sesiones</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Entrevistas</CardTitle>
             <VideoIcon className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -137,15 +118,15 @@ export const HomeView = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Agentes Activos</CardTitle>
-            <UsersIcon className="size-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Entrevistas Esta Semana</CardTitle>
+            <TrendingUpIcon className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLoading ? "..." : stats?.activeAgents || 0}
+              {isLoading ? "..." : stats?.thisWeekMeetings || 0}
             </div>
             <p className="text-xs text-muted-foreground">
-              {stats?.thisMonthAgents ? `+${stats.thisMonthAgents} este mes` : "Sin nuevos agentes"}
+              Entrevistas completadas recientemente
             </p>
           </CardContent>
         </Card>
@@ -186,19 +167,20 @@ export const HomeView = () => {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-x-2">
-              <SparklesIcon className="size-5 text-blue-600" />
-              Asistentes de IA Inteligentes
+              <VideoIcon className="size-5 text-blue-600" />
+              Entrevistas Técnicas en Inglés
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Nuestros agentes de IA están diseñados para asistirte en sesiones, 
-              tomar notas, generar resúmenes y responder preguntas en tiempo real.
+              Practica entrevistas técnicas reales para puestos entry level en IT.
+              Nuestros entrevistadores especializados te guiarán a través de preguntas
+              técnicas y evaluarán tu nivel de inglés profesional.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">Transcripción automática</Badge>
-              <Badge variant="secondary">Resúmenes inteligentes</Badge>
-              <Badge variant="secondary">Chat posterior</Badge>
+              <Badge variant="secondary">Preguntas técnicas reales</Badge>
+              <Badge variant="secondary">Evaluación de inglés</Badge>
+              <Badge variant="secondary">Retroalimentación inmediata</Badge>
             </div>
           </CardContent>
         </Card>
@@ -207,16 +189,19 @@ export const HomeView = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-x-2">
               <TrendingUpIcon className="size-5 text-green-600" />
-              Análisis y Insights
+              Análisis y Retroalimentación
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Obtén insights valiosos de tus sesiones con análisis automático, 
-              seguimiento de temas y recomendaciones personalizadas.
+              Obtén análisis detallados de tu desempeño técnico y nivel de inglés.
+              Recibe recomendaciones personalizadas para mejorar tus habilidades
+              y aumentar tus oportunidades laborales.
             </p>
             <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">Seguimiento de temas</Badge>
+              <Badge variant="secondary">Resúmenes detallados</Badge>
+              <Badge variant="secondary">Correcciones gramaticales</Badge>
+              <Badge variant="secondary">Consejos de mejora</Badge>
             </div>
           </CardContent>
         </Card>
@@ -226,20 +211,20 @@ export const HomeView = () => {
       <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
         <CardContent className="pt-6">
           <div className="text-center space-y-4">
-            <h3 className="text-xl font-semibold">¿Listo para tu primera sesión con IA?</h3>
+            <h3 className="text-xl font-semibold">¿Listo para tu primera entrevista técnica?</h3>
             <p className="text-muted-foreground max-w-md mx-auto">
-              Crea tu primer agente personalizado y comienza a experimentar 
-              el poder de la IA en tus sesiones.
+              Comienza a practicar entrevistas en inglés para puestos entry level en IT.
+              Obtén retroalimentación valiosa sobre tus conocimientos técnicos y nivel de inglés.
             </p>
             <div className="flex gap-3 justify-center">
               <Button asChild>
                 <Link href="/meetings">
-                  Crear Sesión
+                  Comenzar Entrevista
                 </Link>
               </Button>
               <Button variant="outline" asChild>
-                <Link href="/agentes">
-                  Ver Agentes
+                <Link href="/corrections">
+                  Ver Retroalimentación
                 </Link>
               </Button>
             </div>

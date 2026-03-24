@@ -29,24 +29,19 @@ export const DashboardCommand = ({ open, setOpen }: Props) => {
       pageSize: 100,
     })
   );
-  const agents = useQuery(
-    trpc.agents.getMany.queryOptions({
-      search,
-      pageSize: 100,
-    })
-  );
+  const agents = useQuery(trpc.agents.getMany.queryOptions());
   return (
     <CommandResponsiveDialog shouldFilter={false} open={open} onOpenChange={setOpen}>
       <CommandInput 
-        placeholder='Encuentra una sesión o un agente...'
+        placeholder='Encuentra una entrevista o un agente...'
         value={search}
         onValueChange={(value) => setSearch(value)}
       />
       <CommandList>
-        <CommandGroup heading='Sesiones'>
+        <CommandGroup heading='entrevistas'>
           <CommandEmpty>
             <span className='text-sm text-muted-foreground'>
-              No se encontraron sesiones
+              No se encontraron entrevistas
             </span>
           </CommandEmpty>
           {meetings.data?.items.map((meeting) => (
@@ -67,8 +62,8 @@ export const DashboardCommand = ({ open, setOpen }: Props) => {
               No se encontraron agentes
             </span>
           </CommandEmpty>
-          {agents.data?.items.map((agent) => (
-            <CommandItem 
+          {agents.data?.map((agent) => (
+            <CommandItem
               onSelect={() => {
                 router.push(`/agentes/${agent.id}`);
                 setOpen(false);
@@ -80,7 +75,7 @@ export const DashboardCommand = ({ open, setOpen }: Props) => {
                 variant="botttsNeutral"
                 className="size-5"
               />
-              {agent.name}
+              {agent.role}
             </CommandItem>
           ))}
         </CommandGroup>

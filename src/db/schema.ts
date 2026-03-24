@@ -1,6 +1,8 @@
 import { nanoid } from  "nanoid";
 import { pgTable, text, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
 
+export type CorrectionType = "grammar" | "vocabulary" | "technical";
+
 
 export const user = pgTable("user", {
     id: text('id').primaryKey(),
@@ -73,8 +75,7 @@ export const meetings = pgTable("meetings", {
     .notNull()
     .references(() => user.id, { onDelete: 'cascade' }),
     agentId: text("agent_id")
-    .notNull()
-    .references(() => agents.id, { onDelete: 'cascade' }),
+    .notNull(),
     status: meetingStatus("status").notNull().default("upcoming"),
     startedAt: timestamp('started_at'),
     endedAt: timestamp('ended_at'),
@@ -84,4 +85,36 @@ export const meetings = pgTable("meetings", {
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow()
 
+});
+
+export const glossaryEntries = pgTable("glossary_entries", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  term: text('term').notNull(),
+  definition: text('definition').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const dictionaryEntries = pgTable("dictionary_entries", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  word: text('word').notNull(),
+  definition: text('definition').notNull(),
+  partOfSpeech: text('part_of_speech'),
+  phonetic: text('phonetic'),
+  audioUrl: text('audio_url'),
+  language: text('language').notNull(), // 'en' | 'es'
+  letter: text('letter').notNull(),     // primera letra en mayúscula
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const corrections = pgTable("corrections", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  meetingId: text("meeting_id").references(() => meetings.id, { onDelete: 'cascade' }),
+  original: text('original').notNull(),
+  corrected: text('corrected').notNull(),
+  type: text('type').notNull(), // "grammar" | "vocabulary" | "technical"
+  note: text('note').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });

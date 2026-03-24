@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { toast } from "sonner";
+// import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+// import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { useTRPC } from "@/trpc/client";
+// import { useTRPC } from "@/trpc/client";
 
 import { Input } from "@/components/ui/input";
 import { Button} from "@/components/ui/button"
@@ -25,56 +25,56 @@ import { agentsInsertSchema } from "../../schemas";
 
 
 interface AgentFormProps {
-   onSuccess?: () => void;
+   // onSuccess?: () => void;
    onCancel?: () => void;
    initialValues?:  AgentGetOne;
 
 };
 
  export const AgentForm = ({
-   onSuccess,
+   // onSuccess,
    onCancel,
    initialValues
 }: AgentFormProps) => {
-   const trpc = useTRPC();
-   const queryClient = useQueryClient();
+   // const trpc = useTRPC();
+   // const queryClient = useQueryClient();
 
-   const createAgent = useMutation(
-      trpc.agents.create.mutationOptions({
-         onSuccess: async () => {
-            await queryClient.invalidateQueries(
-               trpc.agents.getMany.queryOptions({}),
-            );
-            onSuccess?.();
-         },
-         onError: (error) => {
-            toast.error(error.message);
+   // const createAgent = useMutation(
+   //    trpc.agents.create.mutationOptions({
+   //       onSuccess: async () => {
+   //          await queryClient.invalidateQueries(
+   //             trpc.agents.getMany.queryOptions({}),
+   //          );
+   //          onSuccess?.();
+   //       },
+   //       onError: (error) => {
+   //          toast.error(error.message);
 
-            //TODO :check if error code is "FORBIDDEN", redirect to "/upgrade"
-         },
-      }),
-   );
+   //          //TODO :check if error code is "FORBIDDEN", redirect to "/upgrade"
+   //       },
+   //    }),
+   // );
 
-   const updateAgent = useMutation(
-      trpc.agents.update.mutationOptions({
-         onSuccess: async () => {
-            await queryClient.invalidateQueries(
-               trpc.agents.getMany.queryOptions({}),
-            );
-            if(initialValues?.id){
-               await queryClient.invalidateQueries(
-                  trpc.agents.getOne.queryOptions({id: initialValues.id}),
-               );
-            }
-            onSuccess?.();
-         },
-         onError: (error) => {
-            toast.error(error.message);
+   // const updateAgent = useMutation(
+   //    trpc.agents.update.mutationOptions({
+   //       onSuccess: async () => {
+   //          await queryClient.invalidateQueries(
+   //             trpc.agents.getMany.queryOptions({}),
+   //          );
+   //          if(initialValues?.id){
+   //             await queryClient.invalidateQueries(
+   //                trpc.agents.getOne.queryOptions({id: initialValues.id}),
+   //             );
+   //          }
+   //          onSuccess?.();
+   //       },
+   //       onError: (error) => {
+   //          toast.error(error.message);
 
-            //TODO :check if error code is "FORBIDDEN", redirect to "/upgrade"
-         },
-      }),
-   );
+   //          //TODO :check if error code is "FORBIDDEN", redirect to "/upgrade"
+   //       },
+   //    }),
+   // );
 
    const form = useForm<z.infer<typeof agentsInsertSchema>>({
       resolver: zodResolver(agentsInsertSchema),
@@ -85,17 +85,10 @@ interface AgentFormProps {
    });
 
    const isEdit = !!initialValues?.id;
-   const isPending = createAgent.isPending || updateAgent.isPending;
+   // const isPending = createAgent.isPending || updateAgent.isPending;
 
-   const onSubmit = (values: z.infer<typeof agentsInsertSchema>)=> {
-      if (isEdit) {
-         updateAgent.mutate({
-            ...values,
-            id: initialValues.id,
-         });
-      } else{
-         createAgent.mutate(values);
-      }
+   const onSubmit = () => {
+      // Do nothing - mutations are commented out
    };
    return(
          <Form{...form}>
@@ -136,7 +129,7 @@ interface AgentFormProps {
                {onCancel && (
                <Button
                variant="ghost"
-               disabled={isPending}
+               disabled={false}
                type="button"
                onClick={()=>onCancel()}
                >
@@ -144,7 +137,7 @@ interface AgentFormProps {
 
                </Button>
                )}
-               <Button disabled={isPending} type="submit">
+               <Button disabled={false} type="submit">
                {isEdit ? "Update" : "Crear"}
                </Button>
             </div>

@@ -35,7 +35,7 @@ const statusColorMap = {
 export const columns: ColumnDef<MeetingGetMany[number]>[] = [
   {
     accessorKey: "name",
-    header: "Nombre de la sesión",
+    header: "Nombre de la entrevista ",
     cell:({ row }) => (
         <div className="flex flex-col gap-y-1">
           <span className="font-semibold capitalize">
@@ -45,7 +45,7 @@ export const columns: ColumnDef<MeetingGetMany[number]>[] = [
               <div className="flex items-center gap-x-1">
                 <CornerDownRightIcon className="size-3 text-muted-foreground"/>
                 <span className="text-sm text-muted-foreground max-w-[200px] truncate capitalize">
-                    {row.original.agent.name}
+                    {row.original.agent.role}
                 </span>
               </div>
               <GeneratedAvatar

@@ -39,7 +39,7 @@ const DisabledVideoPreview = () => {
 const AllowBrowserPermissions = () => {
   return (
     <p className="text-sm">
-      Por favor, permite el acceso a tu cámara y micrófono para unirte a la sesión.
+      Por favor, permite el acceso a tu cámara y micrófono para unirte a la entrevista .
     </p>
   )
 }
@@ -55,9 +55,9 @@ export const CallLobby = ({ onJoin }: Props) => {
       <div className="py-4 px-8 flex flex-1 items-center justify-center">
         <div className="flex flex-col items-center justify-center gap-y-6 bg-background rounded-lg shadow-sm p-10">
           <div className="flex flex-col gap-y-2 text-center">
-            <h6 className="text-lg font-medium">¿Listo para unirte a la sesión?</h6>
+            <h6 className="text-lg font-medium">¿Listo para unirte a la entrevista ?</h6>
             <p className="text-sm">
-              Prepara la sesión antes de unirte.
+              Prepara la entrevista antes de unirte.
             </p>
           </div>
           <VideoPreview
@@ -74,7 +74,7 @@ export const CallLobby = ({ onJoin }: Props) => {
               </Link>
             </Button>
             <Button onClick={onJoin}>
-              Unirse a la sesión
+              Unirse a la entrevista 
             </Button>
           </div>
         </div>

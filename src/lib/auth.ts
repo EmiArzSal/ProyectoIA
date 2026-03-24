@@ -5,17 +5,14 @@ import * as schema from "@/db/schema"; // your drizzle schema
  
 export const auth = betterAuth({
   socialProviders: {
-        github: { 
-            clientId: process.env.GITHUB_CLIENT_ID as string, 
-            clientSecret: process.env.GITHUB_CLIENT_SECRET as string, 
-        },
-        google: {
-          clientId: process.env.GOOGLE_CLIENT_ID as string,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET as string
-        } 
+    microsoft: {
+      clientId: process.env.MICROSOFT_CLIENT_ID as string,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET as string,
+      tenantId: process.env.MICROSOFT_TENANT_ID ?? "common",
+    },
   },
-  emailAndPassword:{
-    enabled: true
+  emailAndPassword: {
+    enabled: true,
   },
     database: drizzleAdapter(db, {
         provider: "pg", // or "mysql", "sqlite"

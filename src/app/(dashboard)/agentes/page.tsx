@@ -11,18 +11,8 @@ import {
     AgentsViewLoading, 
     AgentsViewError
 } from "@/modules/agents/ui/views/agents-views";
-import { SearchParams } from "nuqs";
-import { loadSearchParams } from "@/modules/agents/params";
 
-interface Props {
-    searchParams: Promise<SearchParams>
-}
-
-
-
-
-const Page = async ({ searchParams }: Props) => {
-    const filters = await loadSearchParams(searchParams);
+const Page = async () => {
     const session = await auth.api.getSession({
         headers: await headers(),
     });
@@ -32,9 +22,7 @@ const Page = async ({ searchParams }: Props) => {
     }
 
     const queryClient = getQueryClient();
-    void queryClient.prefetchQuery(trpc.agents.getMany.queryOptions({
-        ...filters,
-    }));
+    void queryClient.prefetchQuery(trpc.agents.getMany.queryOptions());
 
         return (
             <>

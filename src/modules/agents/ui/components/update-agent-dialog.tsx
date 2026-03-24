@@ -23,7 +23,6 @@ export const UpdateAgentDialog = ({
             onOpenChange={onOpenChange}
         >
             <AgentForm
-            onSuccess={() =>onOpenChange(false)}
             onCancel={() => onOpenChange(false)}
             initialValues={initialValues}
             />

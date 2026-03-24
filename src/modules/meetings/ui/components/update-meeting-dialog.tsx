@@ -17,8 +17,8 @@ export const UpdateMeetingDialog = ({
 
     return (
         <ResponsiveDialog
-            title="Edita Sesión"
-            description="Edita la sesión."
+            title="Edita entrevista "
+            description="Edita la entrevista ."
             open={open}
             onOpenChange={onOpenChange}
         >

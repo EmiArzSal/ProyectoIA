@@ -12,11 +12,12 @@ import {
 import { and, eq, not } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { agents, meetings } from "@/db/schema";
+import { meetings } from "@/db/schema";
 import { streamVideo } from "@/lib/stream-video";
 import { inngest } from "@/inngest/client";
 import { generateAvatarUri } from "@/lib/avatar";
 import { streamChat } from "@/lib/stream-chat";
+import { getPredefinedAgent } from "@/lib/predefined-agents";
 
 const openaiClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -77,10 +78,7 @@ export async function POST(request: NextRequest) {
       })
       .where(eq(meetings.id, existingMeeting.id));
 
-    const [existingAgent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, existingMeeting.agentId));
+    const existingAgent = getPredefinedAgent(existingMeeting.agentId);
     if (!existingAgent) {
       return NextResponse.json({ error: "Agente no encontrado" }, { status: 404 });
     }
@@ -164,10 +162,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Reunión no encontrada" }, { status: 404 });
       }
 
-      const [existingAgent] = await db
-        .select()
-        .from(agents)
-        .where(eq(agents.id, existingMeeting.agentId));
+      const existingAgent = getPredefinedAgent(existingMeeting.agentId);
       if(!existingAgent){
         return NextResponse.json({ error: "Agente no encontrado" }, { status: 404 });
       }

@@ -1,27 +1,28 @@
 import { db } from "@/db";
-import { agents, meetings, user } from "@/db/schema";
+import { meetings, user } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE } from "@/constants";
 
 import { z } from "zod";
-import { and, count, desc, eq, getTableColumns, ilike, inArray, sql } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, gte, ilike, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
-import { streamVideo } from "@/lib/stream-video";
+import { getPredefinedAgent } from "@/lib/predefined-agents";
 import { generateAvatarUri } from "@/lib/avatar";
 import { MeetingStatus, StreamTranscriptItem } from "../types";
 import JSONL from "jsonl-parse-stringify";
 import { streamChat } from "@/lib/stream-chat";
+import { generateMeetingSummary } from "@/lib/generate-summary";
 
 export const meetingsRouter = createTRPCRouter({
   getStats: protectedProcedure.query(async ({ctx}) => {
-    // Total de sesiones
+    // Total de entrevistas
     const [totalMeetings] = await db
       .select({count: count()})
       .from(meetings)
       .where(eq(meetings.userId, ctx.auth.user.id));
 
-    // Sesiones completadas
+    // entrevistas completadas
     const [completedMeetings] = await db
       .select({count: count()})
       .from(meetings)
@@ -30,19 +31,14 @@ export const meetingsRouter = createTRPCRouter({
         eq(meetings.status, "completed")
       ));
 
-    // Agentes activos (que tienen al menos una sesión)
-    const [activeAgents] = await db
-      .select({count: count()})
-      .from(agents)
-      .where(and(
-        eq(agents.userId, ctx.auth.user.id),
-        sql`EXISTS (
-          SELECT 1 FROM ${meetings} 
-          WHERE ${meetings.agentId} = ${agents.id}
-        )`
-      ));
+    // Agentes activos (distintos agentIds con al menos una entrevista )
+    const activeAgentsResult = await db
+      .selectDistinct({ agentId: meetings.agentId })
+      .from(meetings)
+      .where(eq(meetings.userId, ctx.auth.user.id));
+    const activeAgents = { count: activeAgentsResult.length };
 
-    // Tiempo total (suma de duraciones de sesiones completadas)
+    // Tiempo total (suma de duraciones de entrevistas completadas)
     const [totalTimeResult] = await db
       .select({
         totalSeconds: sql<number>`COALESCE(SUM(EXTRACT(EPOCH FROM (ended_at - started_at))), 0)`
@@ -54,7 +50,7 @@ export const meetingsRouter = createTRPCRouter({
         sql`ended_at IS NOT NULL AND started_at IS NOT NULL`
       ));
 
-    // Sesiones esta semana
+    // entrevistas esta semana
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     
@@ -66,17 +62,17 @@ export const meetingsRouter = createTRPCRouter({
         sql`created_at >= ${oneWeekAgo}`
       ));
 
-    // Agentes este mes
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    
-    const [thisMonthAgents] = await db
-      .select({count: count()})
-      .from(agents)
+    // Agentes únicos practicados este mes
+    const oneMonthAgoForAgents = new Date();
+    oneMonthAgoForAgents.setMonth(oneMonthAgoForAgents.getMonth() - 1);
+    const thisMonthAgentsResult = await db
+      .selectDistinct({ agentId: meetings.agentId })
+      .from(meetings)
       .where(and(
-        eq(agents.userId, ctx.auth.user.id),
-        sql`created_at >= ${oneMonthAgo}`
+        eq(meetings.userId, ctx.auth.user.id),
+        sql`created_at >= ${oneMonthAgoForAgents}`
       ));
+    const thisMonthAgents = { count: thisMonthAgentsResult.length };
 
     // Tiempo esta semana
     const [thisWeekTimeResult] = await db
@@ -123,18 +119,23 @@ export const meetingsRouter = createTRPCRouter({
     if(!existingMeeting) {
       throw new TRPCError({
         code: "NOT_FOUND", 
-        message: "Sesión no encontrada"
+        message: "Entrevista no encontrada"
       });
     }
     if(!existingMeeting.transcriptUrl){
       return [];
     }
-    const transcript = await fetch(existingMeeting.transcriptUrl)
-      .then((res) => res.text())
-      .then((text) => JSONL.parse<StreamTranscriptItem>(text))
-      .catch(() => {
-        return [];
-      });
+    let transcriptText: string;
+    try {
+      if (existingMeeting.transcriptUrl.startsWith("http")) {
+        transcriptText = await fetch(existingMeeting.transcriptUrl).then((r) => r.text());
+      } else {
+        transcriptText = existingMeeting.transcriptUrl;
+      }
+    } catch {
+      return [];
+    }
+    const transcript = JSONL.parse<StreamTranscriptItem>(transcriptText);
     const speakerIds = [
       ...new Set(transcript.map((item) => item.speaker_id)),
     ];
@@ -150,17 +151,13 @@ export const meetingsRouter = createTRPCRouter({
             user.image ?? generateAvatarUri({seed: user.name, variant: "initials"})
         }));
       });
-    const agentSpeakers = await db
-      .select()
-      .from(agents)
-      .where(inArray(agents.id, speakerIds))
-      .then((agents) => {
-        return agents.map((agent) => ({
-          ...agent,
-          image:
-            generateAvatarUri({seed: agent.name, variant: "botttsNeutral"})
-        }));
-      });
+    const { PREDEFINED_AGENTS } = await import("@/lib/predefined-agents");
+    const agentSpeakers = PREDEFINED_AGENTS
+      .filter((agent) => speakerIds.includes(agent.id))
+      .map((agent) => ({
+        ...agent,
+        image: generateAvatarUri({ seed: agent.name, variant: "botttsNeutral" }),
+      }));
     const speakers = [...userSpeakers, ...agentSpeakers];
     const transcriptWithSpeakers = transcript.map((item) => {
       const speaker = speakers.find(
@@ -185,29 +182,6 @@ export const meetingsRouter = createTRPCRouter({
     });
     return transcriptWithSpeakers;
   }),
-  generateToken: protectedProcedure.mutation(async ({ctx}) => {
-    await streamVideo.upsertUsers(
-      [
-        {
-          id: ctx.auth.user.id,
-          name: ctx.auth.user.name,
-          role: "admin",
-          image:
-            ctx.auth.user.image ?? generateAvatarUri({seed: ctx.auth.user.id, variant: "initials"})
-        }
-      ]
-    )
-    const expirationTime = Math.floor(Date.now() / 1000) + 3600;
-    const issuedAt = Math.floor(Date.now() / 1000) - 60;
-    const token = streamVideo.generateUserToken(
-      {
-        user_id: ctx.auth.user.id,
-        exp: expirationTime,
-        validity_in_seconds: issuedAt,
-      }
-    );
-    return token;
-  }),
 
   remove: protectedProcedure
     .input(z.object({id : z.string()}))
@@ -225,7 +199,7 @@ export const meetingsRouter = createTRPCRouter({
       if(!removedMeeting) {
         throw new TRPCError({
           code: "NOT_FOUND",
-          message: "Sesión no encontrada",
+          message: "Entrevista no encontrada",
         });
       }
       return removedMeeting;
@@ -247,77 +221,76 @@ export const meetingsRouter = createTRPCRouter({
       if(!updatedMeeting) {
         throw new TRPCError({
           code: "NOT_FOUND",
-          message: "Sesión no encontrada",
+          message: "Entrevista no encontrada",
         });
       }
       return updatedMeeting;
     }),
-      create:protectedProcedure
+      create: protectedProcedure
       .input(meetingsInsertSchema)
       .mutation(async ({ input, ctx }) => {
-      const [createdMeeting] = await db
-      .insert(meetings)
-      .values({
-          ...input,
-          userId: ctx.auth.user.id, 
-      })
-      .returning();
-      //TODO: Crear las Stream calls
-
-      const call = streamVideo.video.call("default", createdMeeting.id);
-      await call.create({
-        data: {
-          created_by_id: ctx.auth.user.id,
-          custom: {
-            meetingId: createdMeeting.id,
-            meetingName: createdMeeting.name,
-          },
-          settings_override: {
-            transcription: {
-              language: "es",
-              mode: "auto-on",
-              closed_caption_mode: "auto-on",
-            },
-            recording: {
-              mode: "auto-on",
-              quality: "1080p",
-            },
-          },
-        },
-      })
-      const [existingAgent] = await db
-      .select()
-      .from(agents)
-      .where(eq(agents.id, createdMeeting.agentId));
-
-      if(!existingAgent) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Agente no encontrado",
-        });
-      }
-
-      await streamVideo.upsertUsers([
-        {
-          id: existingAgent.id,
-          name: existingAgent.name,
-          role: "user",
-          image: generateAvatarUri({seed: existingAgent.name, variant: "botttsNeutral"})
+        const existingAgent = getPredefinedAgent(input.agentId);
+        if (!existingAgent) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Agente no encontrado",
+          });
         }
-      ]);
-      return createdMeeting;
-    }),
+
+        const [createdMeeting] = await db
+          .insert(meetings)
+          .values({
+            ...input,
+            userId: ctx.auth.user.id,
+          })
+          .returning();
+
+        return createdMeeting;
+      }),
+
+    startMeeting: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const [updated] = await db
+          .update(meetings)
+          .set({ status: "active", startedAt: new Date() })
+          .where(and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id)))
+          .returning();
+        if (!updated) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
+        }
+        return updated;
+      }),
+
+    endMeeting: protectedProcedure
+      .input(z.object({ id: z.string(), transcript: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const [updated] = await db
+          .update(meetings)
+          .set({
+            status: "processing",
+            endedAt: new Date(),
+            transcriptUrl: input.transcript,
+          })
+          .where(and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id)))
+          .returning();
+        if (!updated) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
+        }
+        // Fire-and-forget: generates summary in background, no await needed
+        void generateMeetingSummary(updated.id, updated.transcriptUrl ?? "", ctx.auth.user.id);
+
+        return updated;
+      }),
     getOne: protectedProcedure
     .input(z.object({id: z.string()}))
     .query(async ({input, ctx}) => {
         const [existingMeeting] = await db
             .select({
               ...getTableColumns(meetings),
-              agent: agents,
               duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
             })
             .from(meetings)
-            .innerJoin(agents, eq(meetings.agentId, agents.id))
             .where(
               and(
                 eq(meetings.id, input.id),
@@ -328,78 +301,92 @@ export const meetingsRouter = createTRPCRouter({
             if(!existingMeeting) {
                 throw new TRPCError({
                     code: "NOT_FOUND",
-                    message: "Sesión no encontrada",
+                    message: "Entrevista no encontrada",
                 });
             }
 
-        return existingMeeting;
+        const agent = getPredefinedAgent(existingMeeting.agentId) ?? {
+          id: existingMeeting.agentId,
+          name: "Entrevistador",
+          role: "Entrevistador",
+          description: "",
+          instructions: "",
+        };
+
+        return { ...existingMeeting, agent };
       }),
 
     getMany: protectedProcedure
       .input(
         z.object({
         page: z.number().default(DEFAULT_PAGE),
-        pageSize: z
-        .number()
-        .min(MIN_PAGE_SIZE)
-        .max(MAX_PAGE_SIZE)
-        .default(DEFAULT_PAGE_SIZE),
+        pageSize: z.number().min(MIN_PAGE_SIZE).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
         search: z.string().nullish(),
         agentId: z.string().nullish(),
-        status: z
-          .enum([
-              MeetingStatus.Upcoming,
-              MeetingStatus.Active,
-              MeetingStatus.Completed,
-              MeetingStatus.Processing,
-              MeetingStatus.Cancelled,
-          ])
-          .nullish(),
+        status: z.enum([
+          MeetingStatus.Upcoming,
+          MeetingStatus.Active,
+          MeetingStatus.Completed,
+          MeetingStatus.Processing,
+          MeetingStatus.Cancelled,
+        ]).nullish(),
+        period: z.enum(["week", "month", "quarter"]).nullish(),
       })
     )
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, search, status , agentId } = input;
-      
-        const data = await db
+      const { page, pageSize, search, status, agentId, period } = input;
+
+      let fromDate: Date | undefined;
+      if (period === "week") {
+        fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - 7);
+      } else if (period === "month") {
+        fromDate = new Date();
+        fromDate.setMonth(fromDate.getMonth() - 1);
+      } else if (period === "quarter") {
+        fromDate = new Date();
+        fromDate.setMonth(fromDate.getMonth() - 3);
+      }
+
+      const whereConditions = and(
+        eq(meetings.userId, ctx.auth.user.id),
+        search ? ilike(meetings.name, `%${search}%`) : undefined,
+        status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled") : undefined,
+        agentId ? eq(meetings.agentId, agentId) : undefined,
+        fromDate ? gte(meetings.createdAt, fromDate) : undefined,
+      );
+
+      const data = await db
         .select({
-              ...getTableColumns(meetings),
-              agent: agents,
-              duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
-            })
-            .from(meetings)
-            .innerJoin(agents, eq(meetings.agentId, agents.id))
-            .where(
-              and(
-                eq(meetings.userId, ctx.auth.user.id),
-                search ? ilike(meetings.name, `%${search}%`) : undefined,
-                status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled"): undefined,  
-                agentId ? eq(meetings.agentId, agentId): undefined,
-              )
-            )
-            .orderBy(desc(meetings.createdAt), desc(meetings.id))
-            .limit(pageSize)
-            .offset((page - 1) * pageSize);
-
-        const [total] = await db
-        .select({count: count()})
+          ...getTableColumns(meetings),
+          duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
+        })
         .from(meetings)
-        .innerJoin(agents, eq(meetings.agentId, agents.id))
-        .where(
-          and(
-            eq(meetings.userId, ctx.auth.user.id),
-            search ? ilike(meetings.name, `%${search}%`) : undefined,
-            status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled"): undefined,
-            agentId ? eq(meetings.agentId, agentId): undefined,
-          )
-        );
-        const totalPages = Math.ceil(total.count / pageSize);
+        .where(whereConditions)
+        .orderBy(desc(meetings.createdAt), desc(meetings.id))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
 
-        return {
-          items: data,
-          total: total.count,
-          totalPages,
-        };
-      }),
+      const [total] = await db
+        .select({ count: count() })
+        .from(meetings)
+        .where(whereConditions);
+
+      const totalPages = Math.ceil(total.count / pageSize);
+
+      const items = data.map((meeting) => ({
+        ...meeting,
+        agent: getPredefinedAgent(meeting.agentId) ?? {
+          id: meeting.agentId,
+          name: "Entrevistador",
+          role: "Entrevistador",
+          description: "",
+          instructions: "",
+        },
+      }));
+
+      return { items, total: total.count, totalPages };
+    }),
 });
 
 // http://localhost:8288

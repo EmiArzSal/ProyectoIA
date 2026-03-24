@@ -30,7 +30,7 @@ export const MeetingIdView =({meetingId}:Props) => {
 
     const [RemoveConfirmation, confirmRemove]= useConfirm(
         "¿Estás Seguro?",
-        "La siguiente acción eliminará esta sesión"
+        "La siguiente acción eliminará esta entrevista "
 
     )
     const {data}= useSuspenseQuery(
@@ -77,7 +77,7 @@ export const MeetingIdView =({meetingId}:Props) => {
             />
             {isCancelled && <CancelledState/>}
             {isCompleted && <CompletedState data={data}/>}
-            {isProcessing && <ProcessingState/>}
+            {isProcessing && <ProcessingState meetingId={meetingId}/>}
             {isUpcoming && <UpcomingState
                 meetingId={meetingId}
             />}
@@ -91,7 +91,7 @@ export const MeetingIdView =({meetingId}:Props) => {
 export const MeetingIdViewLoading =() => {
 return (
     <LoadingState
-    title ="Cargando Sesión"
+    title ="Cargando entrevista "
     description="Esto puede tomar algunoos minutos"
     />
 
@@ -100,7 +100,7 @@ return (
 export const MeetingIdViewError =() => {
 return (
     <ErrorState
-    title ="Error al cargar la sesión"
+    title ="Error al cargar la entrevista "
     description="Por favor intente mas tarde"
     />
 

@@ -15,8 +15,8 @@ export const NewMeetingDialog = ({
     const router = useRouter();
     return (
         <ResponsiveDialog
-            title="Nueva Sesión"
-            description="Crea una nueva sesión."
+            title="Nueva entrevista "
+            description="Crea una nueva entrevista ."
             open={open}
             onOpenChange={onOpenChange}
         >

@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { user, agents, meetings } from "@/db/schema";
+import { user, meetings } from "@/db/schema";
+import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
 import { inngest } from "@/inngest/client";
 import { StreamTranscriptItem } from "@/modules/meetings/types";
 import { eq, inArray } from "drizzle-orm";
@@ -14,7 +15,7 @@ Eres un experto resumidor. Escribes contenido legible, conciso y simple. Te dan 
 Usa la siguiente estructura markdown para cada salida:
 
 ### Resumen General
-Proporciona un resumen detallado y atractivo del contenido de la sesión. Enfócate en las características principales, flujos de trabajo del usuario y cualquier conclusión clave. Escribe en un estilo narrativo, usando oraciones completas. Destaca aspectos únicos o poderosos del producto, plataforma o discusión.
+Proporciona un resumen detallado y atractivo del contenido de la entrevista . Enfócate en las características principales, flujos de trabajo del usuario y cualquier conclusión clave. Escribe en un estilo narrativo, usando oraciones completas. Destaca aspectos únicos o poderosos del producto, plataforma o discusión.
 
 ### Notas
 Desglosa el contenido clave en secciones temáticas con rangos de tiempo. Cada sección debe resumir puntos clave, acciones o demos en formato de viñetas.
@@ -37,7 +38,10 @@ export const meetingsProcessing = inngest.createFunction(
   { event: "meetings/processing" },
   async ({ event, step }) => {
     const response = await step.run("fetch-transcript", async () => {
-      return fetch(event.data.transcriptUrl).then((res) => res.text());
+      const url = event.data.transcriptUrl;
+      // Inline JSONL (stored directly in DB, not a remote URL)
+      if (!url.startsWith("http")) return url;
+      return fetch(url).then((res) => res.text());
     });
     const transcript = await step.run("parse-transcript", async () => {
       return JSONL.parse<StreamTranscriptItem>(response);
@@ -55,15 +59,9 @@ export const meetingsProcessing = inngest.createFunction(
             ...user,
           }))
         );
-        const agentSpeakers = await db
-        .select()
-        .from(agents)
-        .where(inArray(agents.id, speakerIds))
-        .then((agents) => 
-          agents.map((agent) => ({
-            ...agent,
-          }))
-        );
+        const agentSpeakers = PREDEFINED_AGENTS
+          .filter((agent) => speakerIds.includes(agent.id))
+          .map((agent) => ({ id: agent.id, name: agent.role }));
       
       const speakers = [ ...userSpeakers, ...agentSpeakers ];
       return transcript.map((item) => {
