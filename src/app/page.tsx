@@ -81,7 +81,7 @@ export default async function HomePage() {
       <section className="max-w-6xl mx-auto px-6 pt-20 pb-16 grid md:grid-cols-2 gap-12 items-center">
         <div>
           <span className="inline-block text-xs font-semibold uppercase tracking-widest bg-[#d6e6f5] text-[#5b7fbf] px-3 py-1 rounded-full mb-5">
-            Proyecto de tesis — IPN
+            Trabajo Terminal
           </span>
           <h1 className="text-5xl font-bold leading-tight tracking-tight mb-6">
             Practica entrevistas técnicas en inglés con IA
