@@ -6,7 +6,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   LibraryIcon,
@@ -298,6 +297,10 @@ function DictionaryTab() {
     return acc;
   }, {});
   const letters = Object.keys(grouped).sort();
+
+  function setLang(l: string) {
+    throw new Error("Function not implemented.");
+  }
 
   return (
     <div className="flex flex-col gap-6">
