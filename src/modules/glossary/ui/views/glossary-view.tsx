@@ -298,34 +298,12 @@ function DictionaryTab() {
   }, {});
   const letters = Object.keys(grouped).sort();
 
-  function setLang(l: string) {
-    throw new Error("Function not implemented.");
-  }
-
   return (
     <div className="flex flex-col gap-6">
 
       {/* ── Search panel ── */}
       <div className="rounded-xl border bg-white p-5 flex flex-col gap-4 shadow-sm">
         <p className="text-sm font-semibold text-gray-800">Buscar palabra</p>
-
-        {/* Language toggle */}
-        <div className="flex gap-2">
-          {(["en"] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => { setLang(l); setResults(null); setNotFound(false); setSelected(null); }}
-              className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-medium border transition-colors",
-                lang === l
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
-              )}
-            >
-              🇺🇸 Inglés
-            </button>
-          ))}
-        </div>
 
         {/* Word input */}
         <div className="flex gap-2">
