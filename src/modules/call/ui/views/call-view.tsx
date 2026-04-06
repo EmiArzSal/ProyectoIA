@@ -176,16 +176,31 @@ export const CallView = ({ meetingId }: Props) => {
     } catch { /* silent — text always visible */ }
   };
 
-  const getAgentResponse = async (history: ChatMessage[]): Promise<string> => {
+  const getAgentResponse = async (history: ChatMessage[], questionIndex?: number): Promise<string> => {
     if (IS_MOCK) {
       await new Promise<void>((r) => setTimeout(r, 400));
       const idx = mockResponseIdxRef.current++;
       return MOCK_AGENT_RESPONSES[Math.min(idx, MOCK_AGENT_RESPONSES.length - 1)];
     }
+
+    let systemPrompt = meeting.agent.instructions;
+
+    if (questionIndex === undefined) {
+      // Intro: present yourself and ask Q1 (technical)
+      systemPrompt += `\n\n---\nINTERVIEW PROGRESS: Start with a brief introduction and ask your first TECHNICAL question. The interview has ${TOTAL_QUESTIONS} questions total: ${TECH_QUESTIONS} technical first, then ${TOTAL_QUESTIONS - TECH_QUESTIONS} behavioral. Do NOT close the interview yet.`;
+    } else if (questionIndex === TOTAL_QUESTIONS - 1) {
+      // After last answer: close the interview
+      systemPrompt += `\n\n---\nINTERVIEW PROGRESS: The candidate just answered question ${TOTAL_QUESTIONS} of ${TOTAL_QUESTIONS} (the last one). Acknowledge their answer and close the interview professionally. Do NOT ask any more questions.`;
+    } else {
+      const nextQ = questionIndex + 2; // intro already had Q1
+      const type = nextQ <= TECH_QUESTIONS ? "TECHNICAL" : "BEHAVIORAL";
+      systemPrompt += `\n\n---\nINTERVIEW PROGRESS: The candidate just answered question ${questionIndex + 1} of ${TOTAL_QUESTIONS}. Acknowledge briefly and ask question ${nextQ} of ${TOTAL_QUESTIONS}, which must be a ${type} question. Do NOT close the interview — there are still ${TOTAL_QUESTIONS - nextQ} questions remaining after this one.`;
+    }
+
     const res = await fetch("/api/session/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history, systemPrompt: meeting.agent.instructions }),
+      body: JSON.stringify({ messages: history, systemPrompt }),
     });
     if (!res.ok) throw new Error("Error al obtener respuesta del agente");
     const data = await res.json();
@@ -362,7 +377,7 @@ export const CallView = ({ meetingId }: Props) => {
 
         // 2. Initial greeting + first question
         setPhase("ai-thinking");
-        const introText = await getAgentResponse([]);
+        const introText = await getAgentResponse([], undefined);
         if (cancelled) return;
 
         addToTranscript(meeting.agent.id, introText);
@@ -403,7 +418,7 @@ export const CallView = ({ meetingId }: Props) => {
 
           // Agent responds
           setPhase("ai-thinking");
-          const agentText = await getAgentResponse(history);
+          const agentText = await getAgentResponse(history, i);
           if (cancelled || isStoppingRef.current) return;
 
           addToTranscript(meeting.agent.id, agentText);

@@ -39,6 +39,8 @@ const translateError = (message: string) => {
     return "No existe una cuenta con este correo"
   if (message.toLowerCase().includes("too many requests"))
     return "Demasiados intentos. Intenta más tarde"
+  if (message.toLowerCase().includes("email not verified") || message.toLowerCase().includes("verify"))
+    return "UNVERIFIED"
   return "Ocurrió un error. Intenta de nuevo"
 }
 
@@ -64,7 +66,12 @@ export const SignInView = () => {
         },
         onError: ({ error }) => {
           setIsPending(false)
-          setError(translateError(error.message))
+          const msg = translateError(error.message)
+          if (msg === "UNVERIFIED") {
+            router.push(`/verify-email?email=${encodeURIComponent(data.email)}`)
+          } else {
+            setError(msg)
+          }
         },
       }
     )

@@ -72,7 +72,7 @@ export const SignUpView = () => {
       {
         onSuccess: () => {
           setIsPending(false)
-          router.push("/")
+          router.push(`/verify-email?email=${encodeURIComponent(data.email)}`)
         },
         onError: ({ error }) => {
           setIsPending(false)
