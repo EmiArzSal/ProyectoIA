@@ -1,5 +1,5 @@
 import { nanoid } from  "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, pgEnum, integer } from "drizzle-orm/pg-core";
 
 export type CorrectionType = "grammar" | "vocabulary" | "technical";
 
@@ -93,6 +93,24 @@ export const glossaryEntries = pgTable("glossary_entries", {
   term: text('term').notNull(),
   definition: text('definition').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const userStats = pgTable("user_stats", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().unique().references(() => user.id, { onDelete: 'cascade' }),
+  currentStreak: integer('current_streak').notNull().default(0),
+  longestStreak: integer('longest_streak').notNull().default(0),
+  lastPracticeDate: text('last_practice_date'), // "YYYY-MM-DD"
+  totalSessions: integer('total_sessions').notNull().default(0),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+export const userAchievements = pgTable("user_achievements", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  achievementId: text('achievement_id').notNull(),
+  seen: boolean('seen').notNull().default(false),
+  earnedAt: timestamp('earned_at').notNull().defaultNow(),
 });
 
 export const dictionaryEntries = pgTable("dictionary_entries", {

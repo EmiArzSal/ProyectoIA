@@ -13,7 +13,7 @@ import {
   SidebarMenuItem
 } from '@/components/ui/sidebar'
 import { DashboardUserButton } from './dashboard-user-button'
-import { BotIcon, VideoIcon, LayoutDashboardIcon, BookMarkedIcon, LibraryIcon } from 'lucide-react'
+import { BotIcon, VideoIcon, LayoutDashboardIcon, BookMarkedIcon, LibraryIcon, TrophyIcon } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
@@ -45,6 +45,11 @@ const firstSection = [
     icon: LibraryIcon,
     label: 'Glosario',
     href: '/glossary'
+  },
+  {
+    icon: TrophyIcon,
+    label: 'Logros',
+    href: '/achievements'
   }
 ]
 

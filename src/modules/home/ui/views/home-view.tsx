@@ -3,23 +3,45 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  VideoIcon, 
+import {
+  VideoIcon,
   CalendarIcon,
   TrendingUpIcon,
   ClockIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  TrophyIcon,
+  FlameIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useTRPC } from "@/trpc/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { toast } from "sonner";
+import { getAchievement } from "@/lib/achievements";
+import { cn } from "@/lib/utils";
 
 export const HomeView = () => {
   const trpc = useTRPC();
-  
-  const { data: stats, isLoading } = useQuery(
-    trpc.meetings.getStats.queryOptions()
-  );
+  const queryClient = useQueryClient();
+
+  const { data: stats, isLoading } = useQuery(trpc.meetings.getStats.queryOptions());
+  const { data: userStats } = useQuery(trpc.gamification.getStats.queryOptions());
+  const { data: unseen = [] } = useQuery(trpc.gamification.getUnseen.queryOptions());
+  const { data: achievements = [] } = useQuery(trpc.gamification.getAchievements.queryOptions());
+  const markSeen = useMutation(trpc.gamification.markAllSeen.mutationOptions());
+
+  // Show toast for new achievements
+  useEffect(() => {
+    if (unseen.length === 0) return;
+    unseen.forEach((id) => {
+      const a = getAchievement(id);
+      if (a) toast.success(`${a.emoji} ¡Nuevo logro desbloqueado! ${a.title}`, { duration: 5000 });
+    });
+    markSeen.mutate(undefined, {
+      onSuccess: () => queryClient.invalidateQueries(trpc.gamification.getUnseen.queryOptions()),
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unseen.length]);
 
   // Función para formatear el tiempo en horas y minutos
   const formatTime = (seconds: number) => {
@@ -96,6 +118,53 @@ export const HomeView = () => {
               </CardDescription>
             </CardContent>
           </Link>
+        </Card>
+      </div>
+
+      {/* Racha + Logros recientes */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Racha */}
+        <Card className={cn("border-orange-200", userStats?.currentStreak ? "bg-gradient-to-br from-orange-50 to-amber-50" : "")}>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium">Racha de práctica</CardTitle>
+            <FlameIcon className="size-4 text-orange-500" />
+          </CardHeader>
+          <CardContent className="flex items-end justify-between">
+            <div>
+              <p className="text-3xl font-bold text-orange-500">
+                {userStats?.currentStreak ?? 0}
+                <span className="text-base font-normal text-muted-foreground ml-1">días</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Mejor racha: {userStats?.longestStreak ?? 0} días
+              </p>
+            </div>
+            <span className="text-4xl">{(userStats?.currentStreak ?? 0) >= 3 ? "🔥" : "✨"}</span>
+          </CardContent>
+        </Card>
+
+        {/* Logros recientes */}
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium">Logros</CardTitle>
+            <TrophyIcon className="size-4 text-amber-500" />
+          </CardHeader>
+          <CardContent className="flex items-end justify-between">
+            <div>
+              <p className="text-3xl font-bold text-amber-500">
+                {achievements.filter((a) => a.earned).length}
+                <span className="text-base font-normal text-muted-foreground ml-1">/ {achievements.length}</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {achievements.filter((a) => !a.earned).length} por desbloquear
+              </p>
+            </div>
+            <div className="flex gap-1">
+              {achievements.filter((a) => a.earned).slice(-3).map((a) => (
+                <span key={a.id} className="text-2xl" title={a.title}>{a.emoji}</span>
+              ))}
+            </div>
+          </CardContent>
         </Card>
       </div>
 

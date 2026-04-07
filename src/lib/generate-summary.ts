@@ -4,6 +4,7 @@ import { meetings, user, corrections } from "@/db/schema";
 import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
 import { eq, inArray } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
+import { awardAchievements } from "@/lib/award-achievements";
 
 type TranscriptItem = {
   speaker_id: string;
@@ -207,7 +208,12 @@ export async function generateMeetingSummary(
       .set({ summary: raw, status: "completed" })
       .where(eq(meetings.id, meetingId));
 
-    // 5. Save annotations as corrections in the vocabulary notebook
+    // 5. Award achievements
+    if (userId) {
+      await awardAchievements(meetingId, userId, report);
+    }
+
+    // 6. Save annotations as corrections in the vocabulary notebook
     if (userId && report.questions?.length > 0) {
       const entries = report.questions.flatMap((q) =>
         (q.userAnswerAnnotated ?? [])
