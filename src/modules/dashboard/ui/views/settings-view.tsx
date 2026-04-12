@@ -227,8 +227,8 @@ export const SettingsView = ({ user }: SettingsViewProps) => {
       {/* Danger Zone */}
       <Card className="border-red-200">
         <CardHeader>
-          <CardTitle className="text-red-600">Zona de Peligro</CardTitle>
-          <CardDescription>Acciones irreversibles</CardDescription>
+          <CardTitle className="text-red-600">Eliminar Cuenta</CardTitle>
+          <CardDescription>Esta acción es irreversible</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-gray-600 mb-4">
