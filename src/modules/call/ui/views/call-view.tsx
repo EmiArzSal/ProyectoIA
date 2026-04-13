@@ -504,6 +504,7 @@ export const CallView = ({ meetingId }: Props) => {
   const progressPercent  = (questionIndex / TOTAL_QUESTIONS) * 100;
   const isUserTurnActive = phase === "user-turn" || phase === "recording";
 
+
   return (
     <div className="flex h-screen flex-col bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white">
 
