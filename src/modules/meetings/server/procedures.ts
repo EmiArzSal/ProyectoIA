@@ -11,8 +11,7 @@ import { getPredefinedAgent } from "@/lib/predefined-agents";
 import { generateAvatarUri } from "@/lib/avatar";
 import { MeetingStatus, StreamTranscriptItem } from "../types";
 import JSONL from "jsonl-parse-stringify";
-import { streamChat } from "@/lib/stream-chat";
-import { generateMeetingSummary } from "@/lib/generate-summary";
+import { inngest } from "@/inngest/client";
 
 export const meetingsRouter = createTRPCRouter({
   getStats: protectedProcedure.query(async ({ctx}) => {
@@ -96,15 +95,6 @@ export const meetingsRouter = createTRPCRouter({
       thisMonthAgents: thisMonthAgents.count,
       thisWeekTimeSeconds: thisWeekTimeResult.totalSeconds || 0,
     };
-  }),
-
-  generateChatToken: protectedProcedure.mutation(async ({ctx}) => {
-    const token = streamChat.createToken(ctx.auth.user.id);
-    await streamChat.upsertUser({
-      id: ctx.auth.user.id,
-      role: "admin",
-    });
-    return token;
   }),
 
   getTranscript: protectedProcedure
@@ -277,8 +267,10 @@ export const meetingsRouter = createTRPCRouter({
         if (!updated) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
         }
-        // Fire-and-forget: generates summary in background, no await needed
-        void generateMeetingSummary(updated.id, updated.transcriptUrl ?? "", ctx.auth.user.id);
+        await inngest.send({
+          name: "meetings/processing",
+          data: { meetingId: updated.id, userId: ctx.auth.user.id },
+        });
 
         return updated;
       }),
