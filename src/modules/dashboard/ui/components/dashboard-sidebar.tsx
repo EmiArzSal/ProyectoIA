@@ -1,119 +1,130 @@
 "use client"
 
-import React from 'react'
+import * as React from "react"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
-  SidebarMenuItem
-} from '@/components/ui/sidebar'
-import { DashboardUserButton } from './dashboard-user-button'
-import { BotIcon, VideoIcon, LayoutDashboardIcon, BookMarkedIcon, LibraryIcon, TrophyIcon } from 'lucide-react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { cn } from '@/lib/utils'
-import { Separator } from '@/components/ui/separator'
-import { usePathname } from 'next/navigation'
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar"
+import { DashboardUserButton } from "./dashboard-user-button"
+import {
+  BotIcon,
+  VideoIcon,
+  LayoutDashboardIcon,
+  BookMarkedIcon,
+  LibraryIcon,
+  TrophyIcon,
+} from "lucide-react"
+import Link from "next/link"
+import Image from "next/image"
+import { usePathname } from "next/navigation"
 
-const firstSection = [
+const navigationItems = [
   {
     icon: LayoutDashboardIcon,
-    label: 'Dashboard',
-    href: '/dashboard'
+    label: "Dashboard",
+    href: "/dashboard",
   },
   {
     icon: VideoIcon,
-    label: 'Historial',
-    href: '/meetings'
+    label: "Historial",
+    href: "/meetings",
   },
   {
     icon: BotIcon,
-    label: 'Entrevistadores',
-    href: '/agentes'
+    label: "Entrevistadores",
+    href: "/agentes",
   },
   {
     icon: BookMarkedIcon,
-    label: 'Correcciones',
-    href: '/corrections'
+    label: "Correcciones",
+    href: "/corrections",
   },
   {
     icon: LibraryIcon,
-    label: 'Glosario',
-    href: '/glossary'
+    label: "Glosario",
+    href: "/glossary",
   },
   {
     icon: TrophyIcon,
-    label: 'Logros',
-    href: '/achievements'
-  }
+    label: "Logros",
+    href: "/achievements",
+  },
 ]
 
-
-function DashboardSidebar() {
+export function DashboardSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname()
+
   return (
-    <Sidebar className="border-none shadow-xl">
-      <SidebarHeader className='text-sidebar-accent-foreground'>
-        <Link href='/' className='flex items-center gap-2 px-2 pt-2'> 
-          <Image src='/logo.png' alt='Agora' width={56} height={56} />
-          <p className='text-2xl font-semibold'>Agora</p>
-        </Link>
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <Link href="/">
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <Image
+                    src="/logo.png"
+                    alt="Agora"
+                    width={24}
+                    height={24}
+                    className="size-6 object-contain"
+                  />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold text-base">Agora</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    Entrevistas tech
+                  </span>
+                </div>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
-      <div className='px-4 py-2 '>
-        <Separator className='opacity-10 text-[#5D6B68]' />
-      </div>
-      <SidebarContent className="px-4">
+
+      <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Plataforma</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu className="space-y-2">
-              {firstSection.map((item) => {
-                const isActive = pathname.startsWith(item.href)
-                return(
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton asChild className={cn("group relative h-14 px-4 rounded-xl transition-all duration-300 hover:shadow-md",
-                          "bg-white/50 hover:bg-white/80 border border-transparent",
-                          "hover:border-primary/20 hover:scale-[1.02]", isActive && [
-                            "bg-gradient-to-r from-primary/15 to-secondary/15",
-                            "border-primary/30 shadow-lg scale-[1.02]",
-                            "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2", "hover:text-accent hover:scale-110",
-                            "before:w-1 before:h-8 before:bg-gradient-to-b before:from-primary before:to-secondary before:rounded-r-full",
-                          ],
-                          )} isActive={isActive}>
-                    <Link href={item.href} className="flex items-center gap-4 w-full">
-                      <div className={cn(
-                              "p-2.5 rounded-lg transition-all duration-300",
-                              "hover:text-accent",
-                              isActive && "from-primary/30 to-secondary/30")}>
-                        <item.icon className={cn("size-5 transition-all duration-300",isActive ? "text-primary" : "text-muted-foreground"
-                        )}/>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                            <p
-                              className={cn(
-                                "text-sm font-semibold transition-colors duration-300",
-                                isActive ? "text-primary" : "text-foreground" 
-                              )}
-                            >
-                              {item.label}
-                            </p>
-                      </div>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+            <SidebarMenu>
+              {navigationItems.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== "/dashboard" && pathname.startsWith(item.href))
+
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={item.label}
+                    >
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 )
               })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className='text-sidebar-accent-foreground'>
-        <DashboardUserButton/>
+
+      <SidebarFooter>
+        <DashboardUserButton />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }
