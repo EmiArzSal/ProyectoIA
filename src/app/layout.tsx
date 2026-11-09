@@ -1,12 +1,8 @@
-import { Geist, Inter } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import { TRPCReactProvider } from "@/trpc/client";
 import { Toaster } from "sonner";
 import { NuqsAdapter } from "nuqs/adapters/next";
-
-const inter = Inter({
-  subsets: ["latin"],
-});
 
 const geist = Geist({
   subsets: ["latin"],
@@ -22,9 +18,7 @@ export default function RootLayout({
     <NuqsAdapter>
       <TRPCReactProvider>
         <html lang="es">
-          <body
-            className={`${inter.className} ${geist.variable} antialiased`}
-          >
+          <body className={`${geist.className} ${geist.variable} antialiased`}>
             <Toaster/>
             {children}
           </body>
