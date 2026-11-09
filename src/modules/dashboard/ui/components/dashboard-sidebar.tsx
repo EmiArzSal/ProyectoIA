@@ -28,12 +28,12 @@ const firstSection = [
   },
   {
     icon: VideoIcon,
-    label: 'Entrevistas',
+    label: 'Historial',
     href: '/meetings'
   },
   {
     icon: BotIcon,
-    label: 'Agentes',
+    label: 'Entrevistadores',
     href: '/agentes'
   },
   {
