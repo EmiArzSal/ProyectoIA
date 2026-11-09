@@ -100,11 +100,9 @@ export const AgentIdView = ({ agentId }: Props) => {
 
       <div className="flex-1 py-4 px-4 md:px-8 flex flex-col gap-y-4">
         <div className="flex items-center gap-x-2">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/agentes">
+          <Button variant="ghost" size="sm" nativeButton={false} render={<Link href="/agentes" />}>
               <ChevronLeftIcon className="size-4" />
               Volver
-            </Link>
           </Button>
         </div>
         <div className="bg-white rounded-xl border p-6 flex flex-col gap-y-6">

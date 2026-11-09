@@ -16,11 +16,9 @@ export const ActiveState = ({ meetingId }: Props) => {
         description="La entrevista terminará una vez que todos los participantes se hayan desconectado"
         />
       <div className="flex flex-col-reverse gap-2 items-center lg:flex-row lg:justify-center w-full">
-        <Button variant="default" size="icon" className="w-full lg:w-auto px-6" asChild>
-          <Link href={`/call/${meetingId}`}>
+        <Button variant="default" size="icon" className="w-full lg:w-auto px-6" nativeButton={false} render={<Link href={`/call/${meetingId}`} />}>
             <VideoIcon/>
             Unirse a la entrevista 
-          </Link>
         </Button>
       </div>
     </div>

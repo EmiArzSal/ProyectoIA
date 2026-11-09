@@ -16,11 +16,9 @@ export const UpcomingState = ({ meetingId }: Props) => {
         description="Cuando una reunión sea programada, aparecerá aquí"
         />
       <div className="flex flex-col-reverse gap-2 items-center lg:flex-row lg:justify-center w-full">
-        <Button variant="default" size="icon" className="w-full lg:w-auto" asChild>
-          <Link href={`/call/${meetingId}`}>
+        <Button variant="default" size="icon" className="w-full lg:w-auto" nativeButton={false} render={<Link href={`/call/${meetingId}`} />}>
             <VideoIcon/>
             Iniciar reunión
-          </Link>
         </Button>
       </div>
     </div>

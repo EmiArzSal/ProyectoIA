@@ -58,7 +58,51 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-}
+  --animate-flip-words-in: flip-words-in 450ms cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--flip-words-index, 0) * var(--flip-words-stagger, 40ms)) both;
+  --animate-flip-words-in-again: flip-words-in-again 450ms cubic-bezier(0.34, 1.56, 0.64, 1) calc(var(--flip-words-index, 0) * var(--flip-words-stagger, 40ms)) both;
+  --animate-flip-words-out: flip-words-out 500ms cubic-bezier(0.4, 0, 1, 1) both;
+  --animate-flip-words-out-again: flip-words-out-again 500ms cubic-bezier(0.4, 0, 1, 1) both;
+  @keyframes flip-words-in {
+  from {
+    filter: blur(8px);
+    opacity: 0;
+    translate: 0 0.4em;
+    }
+  }
+  @keyframes flip-words-in-again {
+  from {
+    filter: blur(8px);
+    opacity: 0;
+    translate: 0 0.4em;
+    }
+  }
+  @keyframes flip-words-out {
+  from {
+    opacity: 1;
+    }
+  to {
+    filter: blur(8px);
+    opacity: 0;
+    scale: 1.25;
+    translate: var(--flip-words-x, 0.4em) -0.7em;
+    }
+  }
+  @keyframes flip-words-out-again {
+  from {
+    opacity: 1;
+    }
+  to {
+    filter: blur(8px);
+    opacity: 0;
+    scale: 1.25;
+    translate: var(--flip-words-x, 0.4em) -0.7em;
+    }
+  }
+  --animate-highlight-text: highlight-text var(--highlight-text-duration, 1000ms) cubic-bezier(0.45, 0, 0.2, 1) var(--highlight-text-delay, 0ms) both
+;
+  @keyframes highlight-text {
+  from {
+    background-size: 0% 100%;}}}
 
 :root {
   /* Base Configuration */
@@ -69,6 +113,7 @@
   /* Primary - Based on logo blue, represents trust and professionalism */
   --primary: #5b7fbf;
   --primary-foreground: #ffffff;
+  --color-land-accent: #F4A261;
 
   /* Secondary - Success green, represents growth and achievement */
   --secondary: #10b981;
@@ -264,4 +309,23 @@
   .dark .glass-effect {
     @apply bg-slate-800/80 backdrop-blur-sm border border-slate-700/50;
   }
+}
+
+.auth-signup__brand-panel {
+  background: radial-gradient(ellipse at center, var(--background) 0%, color-mix(in srgb, var(--color-land-accent) 35%, var(--background)) 100%);
+}
+
+.auth-signup__submit {
+  background-color: var(--color-land-accent);
+  color: var(--foreground);
+}
+
+.auth-signup__submit:hover {
+  background-color: color-mix(in srgb, var(--color-land-accent) 88%, var(--foreground));
+  color: var(--foreground);
+}
+
+.auth-signin__signup-link {
+  color: var(--color-land-accent);
+  text-decoration-color: currentColor;
 }

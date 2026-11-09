@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form"
 import { useState } from "react"
 import { authClient } from "@/lib/auth-client"
 import { Alert, AlertTitle } from "@/components/ui/alert"
-import { OctagonAlertIcon } from "lucide-react"
+import { ArrowLeft, OctagonAlertIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -78,7 +78,17 @@ export const SignInView = () => {
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 font-sans">
+      <Button
+        variant="ghost"
+        size="lg"
+        className="self-start gap-2 font-sans hover:underline underline-offset-4"
+        nativeButton={false}
+        render={<Link href="/" />}
+      >
+        <ArrowLeft aria-hidden="true" className="size-4" />
+        Volver
+      </Button>
       <Card className="overflow-hidden p-0 border-none">
         <CardContent className="grid p-0 md:grid-cols-2">
           <Form {...form}>
@@ -129,14 +139,24 @@ export const SignInView = () => {
                     <AlertTitle className="text-sm">{error}</AlertTitle>
                   </Alert>
                 )}
-                <Button disabled={isPending} className="w-full" type="submit">
+                <Button disabled={isPending} className="w-full font-sans" type="submit" variant="default" size="lg">
                   {isPending ? "Iniciando sesión..." : "Iniciar sesión"}
                 </Button>
-                <div className="text-center text-sm">
-                  ¿No tienes una cuenta?{" "}
-                  <Link href="/sign-up" className="text-primary underline">
-                    Regístrate
-                  </Link>
+                <div className="flex flex-col gap-2 text-center text-sm">
+                  <div>
+                    ¿No tienes una cuenta?{" "}
+                    <Link href="/sign-up" className="auth-signin__signup-link underline underline-offset-4 font-medium">
+                      Regístrate
+                    </Link>
+                  </div>
+                  <div>
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </Link>
+                  </div>
                 </div>
               </div>
             </form>
@@ -144,20 +164,10 @@ export const SignInView = () => {
 
           <div className="bg-radial from-sidebar to-sidebar-accent relative hidden md:flex flex-col items-center justify-center gap-y-4">
             <Image src="/logo.png" alt="Logo Agora" width={110} height={110} />
-            <p className="text-2xl font-bold">AGORA</p>
+            <p className="text-2xl font-bold">Agora</p>
           </div>
         </CardContent>
       </Card>
-      <div className="text-muted-foreground text-center text-xs text-balance">
-        Al iniciar sesión, aceptas nuestros{" "}
-        <a href="#" className="text-primary underline underline-offset-4">
-          Términos de servicio
-        </a>{" "}
-        y{" "}
-        <a href="#" className="text-primary underline underline-offset-4">
-          Política de privacidad
-        </a>
-      </div>
     </div>
   )
 }

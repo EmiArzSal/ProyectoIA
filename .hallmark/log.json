@@ -1,0 +1,29 @@
+[
+ {
+  "shape": "Workbench",
+  "theme": "Editorial",
+  "axes": "light/display-condensed/cool blue override",
+  "hero": "Counter",
+  "nav": "edge-aligned account bar with supplied logo",
+  "footer": "mast with Wikimedia Commons photo credits",
+  "imagery": "built product sample in practice-screen slot; two editorial photographs of circuit soldering and network infrastructure",
+  "photos": ["Soldering a 0805.jpg", "Network switches.jpg"],
+  "entry": "Agora, English interview practice for ESCOM IPN systems engineering students",
+  "fingerprint": "Workbench|Counter|practice-screen|roles-index|account-bar|mast",
+  "sections": [
+   "Hero practice screen",
+   "Five-role index",
+   "Hardware and network photo spread",
+   "Practice sequence",
+   "English interview context",
+   "Registration close"
+  ],
+  "signature": "Sample interview question with animated voice waveform",
+  "waived": [],
+  "prompt": "Redesign the Agora English job interview practice landing page for ESCOM IPN students",
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "page",
+  "date": "2026-11-08"
+ }
+]

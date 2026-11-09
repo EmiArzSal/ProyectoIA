@@ -286,15 +286,11 @@ export const HomeView = () => {
               Obtén retroalimentación valiosa sobre tus conocimientos técnicos y nivel de inglés.
             </p>
             <div className="flex gap-3 justify-center">
-              <Button asChild>
-                <Link href="/meetings">
-                  Comenzar Entrevista
-                </Link>
+              <Button nativeButton={false} render={<Link href="/meetings" />}>
+                Comenzar Entrevista
               </Button>
-              <Button variant="outline" asChild>
-                <Link href="/corrections">
-                  Ver Retroalimentación
-                </Link>
+              <Button variant="outline" nativeButton={false} render={<Link href="/corrections" />}>
+                Ver Retroalimentación
               </Button>
             </div>
           </div>

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "google-docs-local": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@a1-x-tech/mcp-google-drive@latest"
+      ],
+      "serverUrl": "http://127.0.0.1:8989/mcp"
+    }
+  }
+}
