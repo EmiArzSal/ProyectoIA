@@ -19,24 +19,29 @@ export const MeetingsView = () => {
   const { data } = useSuspenseQuery(trpc.meetings.getMany.queryOptions({
     ...filters,
   }));
-  return (
-    <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-4">
-      <DataTable
-        data={data.items}
-        columns={columns}
-        onRowClick={(row) => router.push (`/meetings/${row.id}`)} 
-      />
-      <DataPagination
-      page={filters.page}
-      totalPages={data.totalPages}
-      onPageChange={(page)=>setFilters({page})}
-      />
-      {data.items.length === 0 &&(
-        <EmptyState
-        title="Sin entrevistas registradas"
-        description="Cuando completes una entrevista de práctica, aparecerá aquí con su resumen."
-        />
 
+  return (
+    <div className="flex-1 pb-4 px-4 md:px-8 flex flex-col gap-y-6">
+      {data.items.length > 0 ? (
+        <>
+          <div className="rounded-lg border bg-background overflow-hidden">
+            <DataTable
+              data={data.items}
+              columns={columns}
+              onRowClick={(row) => router.push(`/meetings/${row.id}`)}
+            />
+          </div>
+          <DataPagination
+            page={filters.page}
+            totalPages={data.totalPages}
+            onPageChange={(page)=>setFilters({page})}
+          />
+        </>
+      ) : (
+        <EmptyState
+          title="Sin entrevistas registradas"
+          description="Cuando completes una entrevista de práctica, aparecerá aquí con su resumen."
+        />
       )}
     </div>
   );
