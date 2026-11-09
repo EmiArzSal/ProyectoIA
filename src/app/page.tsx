@@ -3,43 +3,121 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
+import Script from "next/script";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Steps,
+  StepsList,
+  StepsItem,
+  StepsTrigger,
+  StepsIndicator,
+  StepsSeparator,
+  StepsTitle,
+  StepsDescription,
+} from "@/components/ui/steps";
+import type { Metadata } from "next";
+import { FlipWords } from "@/components/ui/flip-words";
+import { HighlightText } from "@/components/ui/highlight-text";
+import { Button } from "@/components/ui/button";
+import "./agora.css";
+import { Separator } from "@radix-ui/react-separator";
+
+export const metadata: Metadata = {
+  title: "Agora | Practica entrevistas en inglés",
+  description:
+    "Practica entrevistas de trabajo en inglés para puestos tech entry-level con Agora.",
+};
 
 const roles = [
   {
     title: "Frontend Developer",
-    description:
-      "HTML, CSS, JavaScript, React, accesibilidad y fundamentos de diseño de interfaces.",
-    image:
-      "https://images.unsplash.com/photo-1555099962-4199c345e5dd?w=600&q=80",
+    description: "HTML, CSS, JavaScript, React, accesibilidad y rendimiento de interfaces.",
+    questions: [
+      "How can semantic HTML improve accessibility?",
+      "When would you use CSS Grid instead of Flexbox?",
+      "What is the difference between props and state in React?",
+      "Tell me about a personal or academic project you're proud of.",
+    ],
   },
   {
     title: "Backend Developer",
-    description:
-      "REST APIs, bases de datos, autenticación, escalabilidad y diseño de sistemas.",
-    image:
-      "https://images.unsplash.com/photo-1629654297299-c8506221ca97?w=600&q=80",
+    description: "APIs REST, bases de datos, autenticación, escalabilidad y diseño de sistemas.",
+    questions: [
+      "What makes an HTTP method safe or idempotent?",
+      "When would you choose SQL over a NoSQL database?",
+      "What is the difference between authentication and authorization?",
+      "Describe a project where you built or consumed an API.",
+    ],
   },
   {
     title: "Data Analyst",
-    description:
-      "SQL, visualización de datos, Python básico y pensamiento analítico.",
-    image:
-      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&q=80",
+    description: "SQL, Python, visualización de datos, pensamiento analítico y estadística.",
+    questions: [
+      "What is the difference between an INNER JOIN and a LEFT JOIN?",
+      "How would you handle missing values in a dataset?",
+      "How would you choose a chart to compare categories?",
+      "Describe a time you used data to support a decision.",
+    ],
   },
   {
     title: "QA Engineer",
-    description:
-      "Planificación de pruebas, testing manual y automatizado, reporte de bugs.",
-    image:
-      "https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=600&q=80",
+    description: "Planificación de pruebas, testing manual y automatizado, reporte de bugs y CI/CD.",
+    questions: [
+      "When would you use manual testing instead of automation?",
+      "What should a clear bug report include?",
+      "How do unit, integration, and end-to-end tests differ?",
+      "How do you decide what to test when time is limited?",
+    ],
   },
   {
     title: "DevOps Engineer",
-    description:
-      "Linux, pipelines CI/CD, contenedores, servicios en la nube y monitoreo.",
-    image:
-      "https://images.unsplash.com/photo-1667372393119-3d4c48d07fc9?w=600&q=80",
+    description: "Linux, CI/CD, contenedores, servicios en la nube y monitoreo de infraestructura.",
+    questions: [
+      "What is the difference between a Docker image and a container?",
+      "What stages might a CI/CD pipeline include?",
+      "How do logs and metrics help you investigate an incident?",
+      "How do you stay current with tools and technologies in DevOps?",
+    ],
   },
+];
+
+const practiceSteps = [
+  {
+    title: "Elige un puesto",
+    description: "Su agente iniciará la sesión.",
+  },
+  {
+    title: "Responde en inglés",
+    description: "Responde preguntas técnicas y de soft skills como en una entrevista real.",
+  },
+  {
+    title: "Revisa tu entrevista",
+    description: "Recibe la transcripción completa y un resumen de IA con observaciones y áreas de mejora.",
+  },
+];
+
+const concepts = [
+  { role: "Frontend Developer", name: "HTML semántico", image: "html" },
+  { role: "Frontend Developer", name: "CSS, Flexbox y Grid", image: "css" },
+  { role: "Frontend Developer", name: "JavaScript", image: "javascript" },
+  { role: "Frontend Developer", name: "React", image: "react" },
+  { role: "Backend Developer", name: "Bases de datos", image: "database" },
+  { role: "Data Analyst", name: "SQL y consultas", image: "sql" },
+  { role: "Data Analyst", name: "Python", image: "python" },
+  { role: "Data Analyst", name: "pandas", image: "pandas" },
+  { role: "QA Engineer", name: "Selenium", image: "selenium" },
+  { role: "DevOps Engineer", name: "Linux", image: "linux" },
+  { role: "DevOps Engineer", name: "Docker", image: "docker" },
 ];
 
 export default async function HomePage() {
@@ -52,280 +130,267 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#fafbfc] text-[#1f2937]">
+    <main className="agora-page">
+      <header className="agora-header">
+        <div className="agora-container agora-header__inner">
+          <Link className="agora-wordmark" href="/" aria-label="Agora, inicio">
+            <Image src="/logo.png" alt="" width={60} height={60} />
+            <span className="agora-wordmark__name">Agora</span>
+          </Link>
 
-      {/* Navbar */}
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-[#e5e7eb]">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <span className="text-xl font-bold tracking-tight text-[#5b7fbf]">
-            Agora
-          </span>
-          <nav className="flex items-center gap-3">
-            <Link
-              href="/sign-in"
-              className="text-sm font-medium text-[#1f2937] hover:text-[#5b7fbf] transition-colors px-4 py-2 rounded-lg hover:bg-[#f3f4f6]"
-            >
-              Iniciar sesión
-            </Link>
-            <Link
-              href="/sign-up"
-              className="text-sm font-medium bg-[#5b7fbf] text-white px-4 py-2 rounded-lg hover:bg-[#4a6eae] transition-colors"
-            >
-              Comenzar gratis
-            </Link>
+          <nav className="agora-nav" aria-label="Cuenta">
+              <Button className="agora-button_login" size="lg" nativeButton={false} render={<Link href="/sign-in" />}>
+                Iniciar Sesión
+              </Button>
+            <Button className="agora-button_register" size="lg" variant="ghost" nativeButton={false} render={<Link href="/sign-up" />}>
+              Registrarse
+            </Button>
           </nav>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 pt-20 pb-16 grid md:grid-cols-2 gap-12 items-center">
-        <div>
-          <span className="inline-block text-xs font-semibold uppercase tracking-widest bg-[#d6e6f5] text-[#5b7fbf] px-3 py-1 rounded-full mb-5">
-            Trabajo Terminal
-          </span>
-          <h1 className="text-5xl font-bold leading-tight tracking-tight mb-6">
-            Practica entrevistas técnicas en inglés con IA
-          </h1>
-          <p className="text-lg text-[#6b7280] leading-relaxed mb-8">
-            Agora es una herramienta educativa desarrollada como proyecto de
-            tesis para alumnos del IPN. Simula entrevistas reales con agentes
-            de IA especializados en los 5 puestos entry-level más solicitados
-            de la industria tech.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <Link
-              href="/sign-up"
-              className="text-base font-semibold bg-[#5b7fbf] text-white px-7 py-3 rounded-xl hover:bg-[#4a6eae] transition-colors text-center"
-            >
-              Acceder con correo institucional
-            </Link>
-            <Link
-              href="/sign-in"
-              className="text-base font-semibold text-[#5b7fbf] border border-[#5b7fbf] px-7 py-3 rounded-xl hover:bg-[#d6e6f5] transition-colors text-center"
-            >
-              Ya tengo cuenta
-            </Link>
+      <section className="agora-hero" aria-labelledby="hero-title">
+        <div className="agora-container agora-hero__grid">
+          <div className="agora-hero__copy">
+            <h1 id="hero-title"><FlipWords
+              words={["Practica", "Mejora", "Prepara"]}
+              duration={2200}
+              stagger={80}
+              className="hero-flip-words"
+            /></h1>
+            <h1>tu próxima entrevista tech en inglés</h1>
+            <p className="agora-lead">
+              Practica entrevistas laborales en inglés, <HighlightText
+                text="recibe retroalimentación personalizada"
+                duration={1500}
+                highlightColor="var(--color-land-accent)"
+              /> y <HighlightText
+                text="desarrolla la confianza"
+                duration={1300}
+                highlightColor="var(--color-land-accent)"
+              /> que necesitas para dar el siguiente paso en tu carrera profesional.
+            </p>
           </div>
-          <p className="text-xs text-[#6b7280] mt-4">
-            Exclusivo para alumnos con correo <span className="font-medium">@alumno.ipn.mx</span>
-          </p>
+
+          <figure
+            className="practice-screen"
+            data-slot="practice-screen"
+            data-kind="product"
+            data-alt="Captura de una sesión de entrevista simulada en inglés"
+          >
+            <div className="practice-screen__top">
+              <span className="practice-screen__brand">Agora</span>
+              <span className="practice-screen__role">Frontend Developer</span>
+            </div>
+            <div className="practice-screen__body">
+              <div className="practice-screen__speaker">
+                <span className="practice-screen__speaker-mark" aria-hidden="true">A</span>
+                <div>
+                  <p className="practice-screen__speaker-name">Entrevistador de IA</p>
+                  <p className="practice-screen__speaker-state">Pregunta</p>
+                </div>
+              </div>
+              <p className="practice-screen__question">
+                “How would you make a React component accessible?”
+              </p>
+              <div className="practice-screen__response">
+                <div className="practice-screen__response-head">
+                  <span>Tu respuesta</span>
+                  <span>Audio</span>
+                </div>
+                <div className="practice-wave" aria-hidden="true">
+                  {Array.from({ length: 29 }, (_, index) => (
+                    <span key={index} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </figure>
         </div>
-        <div className="relative h-[420px] rounded-2xl overflow-hidden shadow-xl">
+      </section>
+
+      <section className="agora-roles" aria-labelledby="roles-title">
+        <div className="agora-container">
+          <div className="agora-section-heading">
+            <h2 id="roles-title">Cinco roles para empezar</h2>
+            <p>Basándonos en las necesidades del mercado laboral, hemos seleccionado cinco roles clave para que puedas practicar y mejorar tus habilidades.</p>
+          </div>
+          <Accordion type="single" collapsible defaultValue="Frontend Developer" className="w-full border-t-4 border-[var(--color-ink)]">
+            {roles.map((role, index) => (
+              <AccordionItem key={role.title} value={role.title} className="border-b border-[var(--color-rule)]">
+                <AccordionTrigger className="hover:no-underline py-6 px-0 text-left cursor-pointer">
+                  <div className="grid grid-cols-[48px_1fr] sm:grid-cols-[64px_1fr] items-center gap-3 sm:gap-4 w-full text-left">
+                    <span className="role-list__number">0{index + 1}</span>
+                    <span className="role-list__title">{role.title}</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-0">
+                  <div className="role-list__details">
+                    <p>{role.description}</p>
+                    <Separator/>
+                    <Separator/>
+                    <Separator/>
+                    <h3>Preguntas de ejemplo</h3>
+                    <ul>
+                      {role.questions.map((question) => (
+                        <li key={question}>{question}</li>
+                      ))}
+                    </ul>
+                    <Separator/>
+                    <Separator/>
+                    <p className="role-list__note">Las preguntas pueden variar entre sesiones.</p>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      </section>
+
+      <section className="agora-concepts" aria-labelledby="concepts-title">
+        <div className="agora-container agora-concepts__grid">
+          {/* Imágenes a la izquierda */}
+          <div className="agora-concepts__carousel">
+            <Carousel
+              opts={{
+                loop: true,
+                align: "center",
+              }}
+              autoplay={3000}
+              className="w-full max-w-sm mx-auto"
+            >
+              <CarouselContent>
+                {concepts.map((concept) => (
+                  <CarouselItem
+                    key={`${concept.role}-${concept.name}`}
+                    className="flex flex-col items-center justify-center p-4 select-none"
+                  >
+                    <div className="w-36 h-36 sm:w-44 sm:h-44 flex items-center justify-center p-2">
+                      <Image
+                        src={`/concepts/${concept.image}.svg`}
+                        alt={concept.name}
+                        width={180}
+                        height={180}
+                        className="object-contain max-h-full max-w-full"
+                        draggable={false}
+                      />
+                    </div>
+                    <div className="mt-4 text-center">
+                      <span className="text-xs uppercase tracking-wider text-[var(--color-muted)] font-semibold block">
+                        {concept.role}
+                      </span>
+                      <h3 className="text-xl md:text-2xl font-bold mt-1 text-[var(--color-ink)]">
+                        {concept.name}
+                      </h3>
+                    </div>
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+            </Carousel>
+          </div>
+
+          {/* Texto del lado derecho */}
+          <div className="agora-concepts__content">
+            <h2 id="concepts-title">Tecnología según el puesto</h2>
+            <p className="agora-lead">
+              Cada rol requiere un conjunto específico de habilidades y conocimientos técnicos. Practica <HighlightText 
+                text="cómo explicar conceptos clave"
+                highlightColor="var(--color-land-accent)"
+                duration={1500}/> de tu área de especialización en inglés, para que puedas <HighlightText 
+                text="comunicarte con confianza"
+                highlightColor="var(--color-land-accent)"
+                duration={1300}/> durante tus entrevistas.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="agora-practice" aria-labelledby="practice-title">
+        <div className="agora-container agora-practice__grid">
+          <div className="agora-section-heading">
+            <h2 id="practice-title">De tu puesto ideal a la práctica</h2>
+            <p className="agora-lead">
+              Sigue estos pasos para practicar las habilidades técnicas necesarias para tu rol.
+            </p>
+          </div>
+          <div className="w-full border-t-4 border-[var(--color-ink)] pt-6 md:pt-8">
+            <Steps
+              orientation="vertical"
+              count={practiceSteps.length}
+              defaultStep={0}
+              linear={false}
+              className="w-full"
+            >
+              <StepsList className="w-full">
+                {practiceSteps.map((step, index) => (
+                  <StepsItem
+                    key={step.title}
+                    index={index}
+                    className="w-full pb-8 last:pb-0"
+                  >
+                    <StepsTrigger className="w-full text-left flex items-start gap-4 p-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer">
+                      <StepsIndicator className="mt-0.5 shrink-0 font-bold">
+                        {index + 1}
+                      </StepsIndicator>
+                      <div className="flex flex-col gap-1">
+                        <StepsTitle className="text-xl md:text-2xl font-bold font-display text-[var(--color-ink)]">
+                          {step.title}
+                        </StepsTitle>
+                        <StepsDescription className="text-sm md:text-base text-[var(--color-ink-2)] font-reading leading-relaxed mt-1">
+                          {step.description}
+                        </StepsDescription>
+                      </div>
+                    </StepsTrigger>
+                    <StepsSeparator />
+                  </StepsItem>
+                ))}
+              </StepsList>
+            </Steps>
+          </div>
+        </div>
+      </section>
+
+      <section className="agora-english" aria-labelledby="english-title">
+        <div className="agora-container agora-english__inner">
+          <div className="agora-english__copy">
+            <h2 id="english-title">Explica tecnología en inglés</h2>
+            <p>
+              Muchas empresas tech, también remotas e internacionales, entrevistan en inglés.
+              Algunos candidatos con buenas habilidades técnicas no logran comunicarlas con claridad.
+              Practica cómo expresarlas en inglés técnico y bajo presión antes de una entrevista real.
+            </p>
+          </div>
           <Image
-            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=900&q=85"
-            alt="Persona preparándose para una entrevista de trabajo"
-            fill
-            className="object-cover"
-            priority
+            className="agora-english__image"
+            src="/interview.png"
+            alt="Práctica de entrevistas en inglés"
+            width={500}
+            height={500}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
         </div>
       </section>
 
-      {/* Divider stat bar */}
-      <div className="border-y border-[#e5e7eb] bg-white">
-        <div className="max-w-6xl mx-auto px-6 py-8 grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
+      <footer className="agora-footer">
+        <div className="agora-container agora-footer__inner">
           <div>
-            <p className="text-4xl font-bold text-[#5b7fbf]">5</p>
-            <p className="text-sm text-[#6b7280] mt-1">roles especializados</p>
-          </div>
-          <div>
-            <p className="text-4xl font-bold text-[#5b7fbf]">100%</p>
-            <p className="text-sm text-[#6b7280] mt-1">en inglés técnico</p>
-          </div>
-          <div>
-            <p className="text-4xl font-bold text-[#5b7fbf]">IPN</p>
-            <p className="text-sm text-[#6b7280] mt-1">herramienta educativa institucional</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Roles */}
-      <section className="max-w-6xl mx-auto px-6 py-20">
-        <div className="mb-12">
-          <h2 className="text-3xl font-bold mb-3">Los 5 roles que cubrimos</h2>
-          <p className="text-[#6b7280] text-lg max-w-xl">
-            Cada agente conoce en profundidad su área y hace preguntas técnicas
-            y de comportamiento adaptadas al puesto.
-          </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {roles.map((role) => (
-            <div
-              key={role.title}
-              className="group bg-white border border-[#e5e7eb] rounded-2xl overflow-hidden hover:border-[#5b7fbf] hover:shadow-lg transition-all"
-            >
-              <div className="relative h-44 w-full overflow-hidden">
-                <Image
-                  src={role.image}
-                  alt={role.title}
-                  fill
-                  className="object-cover group-hover:scale-105 transition-transform duration-500"
-                />
-              </div>
-              <div className="p-5">
-                <h3 className="font-semibold text-base mb-1">{role.title}</h3>
-                <p className="text-sm text-[#6b7280] leading-relaxed">
-                  {role.description}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* How it works — asymmetric */}
-      <section className="bg-white border-y border-[#e5e7eb]">
-        <div className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-16 items-center">
-          <div className="relative h-[460px] rounded-2xl overflow-hidden shadow-lg">
-            <Image
-              src="https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=900&q=85"
-              alt="Práctica de entrevista"
-              fill
-              className="object-cover"
-            />
-          </div>
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-[#5b7fbf] mb-4">
-              Cómo funciona
-            </p>
-            <h2 className="text-3xl font-bold mb-10">
-              Tres pasos para llegar preparado
-            </h2>
-            <div className="space-y-8">
-              <div className="flex gap-5">
-                <span className="text-3xl font-bold text-[#d6e6f5] leading-none mt-1 select-none">
-                  01
-                </span>
-                <div>
-                  <h3 className="font-semibold mb-1">Elige tu rol</h3>
-                  <p className="text-[#6b7280] text-sm leading-relaxed">
-                    Selecciona el puesto al que estás aplicando y el agente
-                    correspondiente comenzará la sesión.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-5">
-                <span className="text-3xl font-bold text-[#d6e6f5] leading-none mt-1 select-none">
-                  02
-                </span>
-                <div>
-                  <h3 className="font-semibold mb-1">Enfrenta la entrevista</h3>
-                  <p className="text-[#6b7280] text-sm leading-relaxed">
-                    El agente te hará preguntas técnicas y de soft skills en
-                    inglés, como lo haría un entrevistador real.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-5">
-                <span className="text-3xl font-bold text-[#d6e6f5] leading-none mt-1 select-none">
-                  03
-                </span>
-                <div>
-                  <h3 className="font-semibold mb-1">Revisa tu desempeño</h3>
-                  <p className="text-[#6b7280] text-sm leading-relaxed">
-                    Al terminar recibes una transcripción completa y un resumen
-                    generado por IA con observaciones y áreas de mejora.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Por qué en inglés */}
-      <section className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-16 items-center">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-widest text-[#5b7fbf] mb-4">
-            Por qué en inglés
-          </p>
-          <h2 className="text-3xl font-bold mb-6">
-            El idioma que abre puertas en tech
-          </h2>
-          <p className="text-[#6b7280] leading-relaxed mb-6">
-            La mayoría de las empresas de tecnología —incluidas las remotas y
-            las internacionales— realizan sus procesos de selección en inglés.
-            Muchos candidatos con las habilidades técnicas suficientes no pasan
-            por no poder comunicarlas con claridad.
-          </p>
-          <p className="text-[#6b7280] leading-relaxed">
-            Agora te entrena para estructurar y expresar tus respuestas en
-            inglés técnico bajo presión, antes de que llegues a la entrevista
-            real.
-          </p>
-        </div>
-        <div className="relative h-[380px] rounded-2xl overflow-hidden shadow-lg">
-          <Image
-            src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=900&q=85"
-            alt="Profesionales colaborando en tecnología"
-            fill
-            className="object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-br from-[#5b7fbf]/20 to-transparent" />
-        </div>
-      </section>
-
-      {/* CTA final */}
-      <section className="bg-[#5b7fbf]">
-        <div className="max-w-6xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
-          <div>
-            <h2 className="text-3xl font-bold text-white mb-4">
-              Tu próxima entrevista empieza aquí
-            </h2>
-            <p className="text-blue-100 text-lg leading-relaxed mb-8">
-              Regístrate con tu correo institucional del IPN, elige el rol al
-              que quieres aplicar y comienza a practicar cuando quieras.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link
-                href="/sign-up"
-                className="text-base font-semibold bg-white text-[#5b7fbf] px-7 py-3 rounded-xl hover:bg-blue-50 transition-colors text-center"
-              >
-                Acceder con correo institucional
-              </Link>
-              <Link
-                href="/sign-in"
-                className="text-base font-semibold border border-white text-white px-7 py-3 rounded-xl hover:bg-white/10 transition-colors text-center"
-              >
-                Iniciar sesión
-              </Link>
-            </div>
-            <p className="text-blue-200 text-xs mt-4">
-              Requiere correo <span className="font-medium">@alumno.ipn.mx</span>
+            <p>
+              Práctica de entrevistas en inglés para ESCOM, IPN.
             </p>
           </div>
-          <div className="relative h-[320px] rounded-2xl overflow-hidden shadow-xl">
-            <Image
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=85"
-              alt="Profesional de tecnología"
-              fill
-              className="object-cover object-top"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-[#e5e7eb] py-8 bg-white">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-[#6b7280]">
-          <span className="font-bold text-[#5b7fbf]">Agora</span>
-          <div className="flex items-center gap-6">
-            <Link
-              href="/sign-in"
-              className="hover:text-[#5b7fbf] transition-colors"
-            >
+          <nav className="agora-footer__links" aria-label="Acceso a la cuenta">
+            <Button render={<Link href="/sign-in" />} nativeButton={false} variant="ghost" size="lg" className="agora-button_login">
               Iniciar sesión
-            </Link>
-            <Link
-              href="/sign-up"
-              className="hover:text-[#5b7fbf] transition-colors"
-            >
+            </Button>
+            <Button render={<Link href="/sign-up" />} nativeButton={false} variant="ghost" size="lg" className="agora-button_register">
               Registrarse
-            </Link>
-          </div>
+            </Button>
+          </nav>
         </div>
+
       </footer>
-    </div>
+      <Script id="hallmark-slots" strategy="afterInteractive">
+        {`window.hallmarkSlots = (m) => { for (const [k, v] of Object.entries(m)) { const s = document.querySelector('[data-slot="' + k + '"]'); if (!s) continue; const im = new Image(); im.src = typeof v === 'string' ? v : v.src; im.alt = (typeof v === 'object' && v.alt) || s.dataset.alt || ''; im.addEventListener('error', () => im.remove(), { once: true }); s.querySelectorAll(':scope > img').forEach((o) => o.remove()); s.prepend(im); } }; document.querySelectorAll('[data-slot] img').forEach((i) => { if (i.complete && !i.naturalWidth) i.remove(); else i.addEventListener('error', () => i.remove(), { once: true }); });`}
+      </Script>
+    </main>
   );
 }

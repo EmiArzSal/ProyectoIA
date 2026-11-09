@@ -126,6 +126,7 @@ Reglas importantes:
 - Las citas textuales del candidato (userAnswer, userAnswerAnnotated[].text) y las preguntas del entrevistador (question) se mantienen en el idioma original (inglés).
 - NUNCA incluyas ejemplos de código en ninguna parte del JSON. Esta es una práctica de entrevista por voz; las sugerencias de mejora deben ser conceptuales y verbales, no técnicas con sintaxis de programación.
 - Si el candidato omitió una pregunta o no respondió, indica "(sin respuesta)" en userAnswer y deja userAnswerAnnotated como array vacío [].
+- CRÍTICO: El nivel CEFR y los scores SOLO pueden basarse en respuestas reales del candidato. Si la mayoría de respuestas son "(sin respuesta)", los scores deben ser 0 o 1 y el englishLevel debe ser "N/A". NUNCA asumas un nivel alto por ausencia de errores — la falta de respuesta no es evidencia de competencia.
 
 Reglas para userAnswerAnnotated:
 - Divide la respuesta del candidato en segmentos naturales (palabras, frases cortas).
@@ -185,7 +186,38 @@ export async function generateMeetingSummary(
       text: item.text,
     }));
 
-    // 3. Call GPT-4o
+    // 3. Check if the user gave any real answers before calling GPT-4o
+    const userIds = new Set(dbUsers.map((u) => u.id));
+    const userItems = items.filter((item) => userIds.has(item.speaker_id));
+    const hasRealAnswers = userItems.some(
+      (item) => item.text !== "(sin respuesta)" && item.text.trim().length > 0
+    );
+
+    if (!hasRealAnswers) {
+      await db
+        .update(meetings)
+        .set({
+          status: "completed",
+          summary: JSON.stringify({
+            summary: "El candidato no proporcionó respuestas durante la entrevista.",
+            englishLevel: "N/A",
+            scores: {
+              grammar:            { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
+              vocabulary:         { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
+              fluency:            { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
+              technicalKnowledge: { score: 0,                   notes: "No hubo respuestas para evaluar." },
+            },
+            questions:            [],
+            overallStrengths:     [],
+            overallImprovements:  ["Participar activamente respondiendo las preguntas del entrevistador."],
+            recommendation: "No fue posible generar una evaluación porque no se registraron respuestas. Intenta de nuevo y responde las preguntas cuando sea tu turno.",
+          } satisfies InterviewReport),
+        })
+        .where(eq(meetings.id, meetingId));
+      return;
+    }
+
+    // 5. Call GPT-4o
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",

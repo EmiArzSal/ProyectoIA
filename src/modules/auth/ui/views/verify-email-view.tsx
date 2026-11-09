@@ -49,8 +49,8 @@ export const VerifyEmailView = () => {
                     Solicita uno nuevo desde el inicio de sesión.
                   </p>
                 </div>
-                <Button asChild className="w-full">
-                  <Link href="/sign-in">Ir al inicio de sesión</Link>
+                <Button className="w-full" nativeButton={false} render={<Link href="/sign-in" />}>
+                  Ir al inicio de sesión
                 </Button>
               </>
             ) : (
@@ -87,8 +87,8 @@ export const VerifyEmailView = () => {
                       )}
                     </Button>
                   )}
-                  <Button variant="ghost" asChild className="w-full text-muted-foreground">
-                    <Link href="/sign-in">Volver al inicio de sesión</Link>
+                  <Button variant="ghost" className="w-full text-muted-foreground" nativeButton={false} render={<Link href="/sign-in" />}>
+                    Volver al inicio de sesión
                   </Button>
                 </div>
 
