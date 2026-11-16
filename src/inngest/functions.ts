@@ -2,7 +2,7 @@ import { inngest } from "./client";
 import { generateMeetingSummary } from "@/lib/generate-summary";
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export const meetingsProcessing = inngest.createFunction(
   {
@@ -16,9 +16,14 @@ export const meetingsProcessing = inngest.createFunction(
     const [meeting] = await db
       .select()
       .from(meetings)
-      .where(eq(meetings.id, data.meetingId));
+      .where(and(
+        eq(meetings.id, data.meetingId),
+        eq(meetings.userId, data.userId),
+      ));
 
-    if (!meeting) throw new Error(`Meeting ${data.meetingId} not found`);
+    // Account deletion cascades to meetings. Treat queued work for deleted data
+    // as completed so Inngest does not retry a job that can never succeed.
+    if (!meeting) return { skipped: "meeting_or_account_deleted" };
 
     await generateMeetingSummary(meeting.id, meeting.transcriptUrl ?? "", data.userId);
   },

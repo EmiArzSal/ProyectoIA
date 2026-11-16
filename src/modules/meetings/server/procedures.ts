@@ -133,7 +133,7 @@ export const meetingsRouter = createTRPCRouter({
     const userSpeakers = await db
       .select()
       .from(user)
-      .where(inArray(user.id, speakerIds))
+      .where(and(eq(user.id, ctx.auth.user.id), inArray(user.id, speakerIds)))
       .then((users) => {
         return users.map((user) => ({
           ...user,

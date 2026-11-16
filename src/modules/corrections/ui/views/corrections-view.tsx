@@ -155,7 +155,7 @@ export function CorrectionsView() {
             <BookMarkedIcon className="size-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">Mi Glosario</h1>
+            <h1 className="text-xl font-semibold">Mis Correcciones</h1>
             <p className="text-sm text-muted-foreground">
               Correcciones acumuladas de tus entrevistas de práctica
             </p>
@@ -201,7 +201,7 @@ export function CorrectionsView() {
               <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
                 <AlertCircleIcon className="size-10 text-muted-foreground/40" />
                 <p className="text-muted-foreground text-sm">
-                  Aún no hay entradas en tu glosario.<br />
+                  Aún no hay correcciones.<br />
                   Completa una entrevista para ver tus correcciones aquí.
                 </p>
               </div>
