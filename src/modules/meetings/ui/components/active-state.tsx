@@ -12,13 +12,13 @@ export const ActiveState = ({ meetingId }: Props) => {
     <div className="bg-white rounded-lg px-4 py-5 flex flex-col gap-y-8 items-center justify-center">
         <EmptyState
         image="/upcoming.svg"
-        title="Entrevista en curso"
-        description="La entrevista terminará una vez que todos los participantes se hayan desconectado"
+        title="Entrevista interrumpida"
+        description="Esta entrevista se inició pero no se finalizó. Puedes finalizarla y generar el reporte con las respuestas registradas."
         />
       <div className="flex flex-col-reverse gap-2 items-center lg:flex-row lg:justify-center w-full">
         <Button variant="default" size="icon" className="w-full lg:w-auto px-6" nativeButton={false} render={<Link href={`/call/${meetingId}`} />}>
             <VideoIcon/>
-            Unirse a la entrevista 
+            Finalizar entrevista
         </Button>
       </div>
     </div>

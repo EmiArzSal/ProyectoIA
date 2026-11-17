@@ -22,6 +22,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  blockedMessage,
+  DailyUsageBadge,
+  isBlocked,
+  useDailyUsage,
+} from "@/modules/meetings/ui/components/daily-usage";
 
 interface Props {
   agentId: string;
@@ -37,6 +43,8 @@ export const AgentIdView = ({ agentId }: Props) => {
   const { data } = useSuspenseQuery(
     trpc.agents.getOne.queryOptions({ id: agentId })
   );
+  const { data: usage, isPending: usagePending } = useDailyUsage();
+  const blocked = usagePending || isBlocked(usage);
 
   const createMeeting = useMutation(
     trpc.meetings.create.mutationOptions({
@@ -89,7 +97,7 @@ export const AgentIdView = ({ agentId }: Props) => {
               </Button>
               <Button
                 onClick={handleStartSession}
-                disabled={createMeeting.isPending || !sessionName.trim()}
+                disabled={createMeeting.isPending || !sessionName.trim() || blocked}
               >
                 {createMeeting.isPending ? "Iniciando..." : "Comenzar entrevista "}
               </Button>
@@ -146,11 +154,15 @@ export const AgentIdView = ({ agentId }: Props) => {
             </p>
           </div>
 
-          <div className="pt-2">
-            <Button onClick={handleOpenDialog}>
+          <div className="pt-2 flex flex-col items-start gap-2">
+            <Button onClick={handleOpenDialog} disabled={blocked}>
               <VideoIcon className="size-4" />
               Iniciar entrevista de práctica
             </Button>
+            <DailyUsageBadge />
+            {blocked && (
+              <p className="text-sm text-muted-foreground">{blockedMessage(usage)}</p>
+            )}
           </div>
         </div>
       </div>

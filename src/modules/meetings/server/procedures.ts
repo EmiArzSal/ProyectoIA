@@ -12,8 +12,27 @@ import { generateAvatarUri } from "@/lib/avatar";
 import { MeetingStatus, StreamTranscriptItem } from "../types";
 import JSONL from "jsonl-parse-stringify";
 import { inngest } from "@/inngest/client";
+import { getDailyUsage, MAX_SESSIONS_GLOBAL_PER_DAY } from "@/modules/call/server/limits";
+
+// Mock mode (UI development without API calls) is the only case where the
+// client may supply the transcript. Never honoured in production builds.
+const ALLOW_CLIENT_MOCK_TRANSCRIPT =
+  process.env.NEXT_PUBLIC_SESSION_MOCK === "true" && process.env.NODE_ENV !== "production";
+
+async function assertMeetingExists(id: string, userId: string) {
+  const [existing] = await db
+    .select({ status: meetings.status })
+    .from(meetings)
+    .where(and(eq(meetings.id, id), eq(meetings.userId, userId)));
+  if (!existing) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
+  }
+  return existing;
+}
 
 export const meetingsRouter = createTRPCRouter({
+  getDailyUsage: protectedProcedure.query(({ ctx }) => getDailyUsage(ctx.auth.user.id)),
+
   getStats: protectedProcedure.query(async ({ctx}) => {
     // Total de entrevistas
     const [totalMeetings] = await db
@@ -115,17 +134,18 @@ export const meetingsRouter = createTRPCRouter({
     if(!existingMeeting.transcriptUrl){
       return [];
     }
-    let transcriptText: string;
+    // The transcript is stored inline as JSONL. Never fetch URLs from this
+    // column: it used to be user-controllable, which allowed SSRF.
+    const transcriptText = existingMeeting.transcriptUrl;
+    if (/^https?:\/\//i.test(transcriptText.trim())) {
+      return [];
+    }
+    let transcript: StreamTranscriptItem[];
     try {
-      if (existingMeeting.transcriptUrl.startsWith("http")) {
-        transcriptText = await fetch(existingMeeting.transcriptUrl).then((r) => r.text());
-      } else {
-        transcriptText = existingMeeting.transcriptUrl;
-      }
+      transcript = JSONL.parse<StreamTranscriptItem>(transcriptText);
     } catch {
       return [];
     }
-    const transcript = JSONL.parse<StreamTranscriptItem>(transcriptText);
     const speakerIds = [
       ...new Set(transcript.map((item) => item.speaker_id)),
     ];
@@ -197,22 +217,42 @@ export const meetingsRouter = createTRPCRouter({
   update: protectedProcedure
     .input(meetingsUpdateSchema)
     .mutation(async ({input, ctx}) => {
-      const [updatedMeeting] = await db
-      .update(meetings)
-      .set(input)
-      .where(
-        and(
-          eq(meetings.id, input.id),
-          eq(meetings.userId, ctx.auth.user.id)
-        )
-      )
-      .returning();
+      const [existing] = await db
+        .select({ status: meetings.status, agentId: meetings.agentId })
+        .from(meetings)
+        .where(and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id)));
 
-      if(!updatedMeeting) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Entrevista no encontrada",
-        });
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
+      }
+
+      // The interviewer defines the questions and the evaluation, so it can only
+      // change before the interview starts. The name can always be edited.
+      const agentChanged = input.agentId !== existing.agentId;
+      if (agentChanged) {
+        if (existing.status !== "upcoming") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Solo puedes cambiar el entrevistador antes de iniciar la entrevista",
+          });
+        }
+        if (!getPredefinedAgent(input.agentId)) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Agente no encontrado" });
+        }
+      }
+
+      const [updatedMeeting] = await db
+        .update(meetings)
+        .set({ name: input.name, agentId: input.agentId, updatedAt: new Date() })
+        .where(and(
+          eq(meetings.id, input.id),
+          eq(meetings.userId, ctx.auth.user.id),
+          agentChanged ? eq(meetings.status, "upcoming") : undefined,
+        ))
+        .returning();
+
+      if (!updatedMeeting) {
+        throw new TRPCError({ code: "CONFLICT", message: "La entrevista cambió de estado. Intenta de nuevo." });
       }
       return updatedMeeting;
     }),
@@ -241,36 +281,93 @@ export const meetingsRouter = createTRPCRouter({
     startMeeting: protectedProcedure
       .input(z.object({ id: z.string() }))
       .mutation(async ({ input, ctx }) => {
+        const userId = ctx.auth.user.id;
+
+        // upcoming → active only. Re-entering an active interview must not
+        // reset startedAt or the server-side transcript.
+        const existing = await assertMeetingExists(input.id, userId);
+        if (existing.status !== "upcoming") {
+          throw new TRPCError({ code: "CONFLICT", message: "La entrevista ya fue iniciada" });
+        }
+
+        // Cost guard: per-user and platform-wide daily quotas.
+        const usage = await getDailyUsage(userId);
+        if (usage.remaining <= 0) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `Ya usaste tus ${usage.limit} entrevistas de hoy. Podrás practicar de nuevo a partir de medianoche.`,
+          });
+        }
+        if (usage.globalExhausted) {
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `La plataforma alcanzó su límite de ${MAX_SESSIONS_GLOBAL_PER_DAY} entrevistas por hoy. Intenta mañana.`,
+          });
+        }
+
         const [updated] = await db
           .update(meetings)
-          .set({ status: "active", startedAt: new Date() })
-          .where(and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id)))
+          .set({ status: "active", startedAt: new Date(), transcriptUrl: null, updatedAt: new Date() })
+          .where(and(
+            eq(meetings.id, input.id),
+            eq(meetings.userId, userId),
+            eq(meetings.status, "upcoming"),
+          ))
           .returning();
         if (!updated) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
+          throw new TRPCError({ code: "CONFLICT", message: "La entrevista ya fue iniciada" });
         }
         return updated;
       }),
 
     endMeeting: protectedProcedure
-      .input(z.object({ id: z.string(), transcript: z.string() }))
+      .input(z.object({
+        id: z.string(),
+        // Only honoured in mock mode (see ALLOW_CLIENT_MOCK_TRANSCRIPT).
+        mockTranscript: z.string().max(100_000).optional(),
+      }))
       .mutation(async ({ input, ctx }) => {
+        const userId = ctx.auth.user.id;
+        const useMockTranscript = ALLOW_CLIENT_MOCK_TRANSCRIPT && input.mockTranscript !== undefined;
+
+        // active → processing only, atomically, so the job is queued once.
         const [updated] = await db
           .update(meetings)
           .set({
             status: "processing",
             endedAt: new Date(),
-            transcriptUrl: input.transcript,
+            updatedAt: new Date(),
+            ...(useMockTranscript ? { transcriptUrl: input.mockTranscript } : {}),
           })
-          .where(and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id)))
+          .where(and(
+            eq(meetings.id, input.id),
+            eq(meetings.userId, userId),
+            eq(meetings.status, "active"),
+          ))
           .returning();
+
         if (!updated) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Entrevista no encontrada" });
+          await assertMeetingExists(input.id, userId);
+          throw new TRPCError({ code: "CONFLICT", message: "La entrevista no está en curso" });
         }
-        await inngest.send({
-          name: "meetings/processing",
-          data: { meetingId: updated.id, userId: ctx.auth.user.id },
-        });
+
+        try {
+          await inngest.send({
+            name: "meetings/processing",
+            data: { meetingId: updated.id, userId },
+          });
+        } catch (err) {
+          // Roll back so the user can retry instead of being stuck in "processing".
+          await db
+            .update(meetings)
+            .set({ status: "active", endedAt: null })
+            .where(and(eq(meetings.id, updated.id), eq(meetings.status, "processing")));
+          console.error("[endMeeting] inngest.send failed", err);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "No se pudo procesar la entrevista. Intenta de nuevo.",
+          });
+        }
 
         return updated;
       }),

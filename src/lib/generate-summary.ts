@@ -5,6 +5,7 @@ import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
 import { and, eq, inArray } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { awardAchievements } from "@/lib/award-achievements";
+import { AI_MODELS } from "@/lib/ai-models";
 
 type TranscriptItem = {
   speaker_id: string;
@@ -226,6 +227,7 @@ export async function generateMeetingSummary(
       return;
     }
 
+    // 5. Call the evaluation model
     // Do not send transcript data to the provider if the account was deleted
     // while the job was preparing the prompt.
     const [meetingBeforeOpenAI] = await db
@@ -237,7 +239,7 @@ export async function generateMeetingSummary(
     // 5. Call GPT-4o
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: AI_MODELS.evaluation,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },

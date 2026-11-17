@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTRPC } from "@/trpc/client";
 import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { TRPCClientError } from "@trpc/client";
 import { GeneratedAvatar } from "@/components/ui/generated-avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,19 +13,22 @@ import {
   PhoneOffIcon,
   SkipForwardIcon,
   CheckIcon,
+  TriangleAlertIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 import { ErrorState } from "@/components/error-state";
-
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const TOTAL_QUESTIONS = 10;
-const TECH_QUESTIONS = 6;  // 0–5 → 60 s
-const TECH_TIMER_S   = 60;
-const SOFT_TIMER_S   = 90; // 6–9 → 90 s
+import {
+  MAX_SESSION_MINUTES,
+  MAX_SESSION_MS,
+  NO_ANSWER,
+  SOFT_TIMER_S,
+  TECH_QUESTIONS,
+  TECH_TIMER_S,
+  TOTAL_QUESTIONS,
+} from "@/modules/call/constants";
 
 // ── Mock mode (set NEXT_PUBLIC_SESSION_MOCK=true in .env.local) ────────────────
 // Zero API calls — use fake responses and short timers for UI development testing.
@@ -69,10 +73,9 @@ type Phase =
   | "recording"    // mic open → timer running
   | "transcribing"
   | "review"       // summary of unanswered questions
+  | "interrupted"  // session cannot continue (reload, error) → offer to finish
   | "finishing"    // endMeeting in progress
   | "done";
-
-type ChatMessage = { role: "user" | "assistant"; content: string };
 
 type TranscriptItem = {
   speaker_id: string;
@@ -87,7 +90,29 @@ type QuestionRecord = {
   userAnswer: string | null; // null = skipped / no answer
 };
 
-type UserTurnResult = { text: string; skipped: boolean };
+// The answer is sent to the server as audio; the server transcribes it and
+// writes it to the transcript. mockText is only used in mock mode.
+type UserTurnResult = { audio: Blob | null; skipped: boolean; mockText?: string };
+
+const trpcErrorCode = (err: unknown) =>
+  err instanceof TRPCClientError ? (err.data as { code?: string } | undefined)?.code : undefined;
+
+// The server answered 410: the interview's time limit has passed.
+class TimeUpError extends Error {}
+
+const formatClock = (totalSeconds: number) => {
+  const s = Math.max(0, totalSeconds);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+
+const readApiError = async (res: Response, fallback: string) => {
+  try {
+    const data = await res.json();
+    return typeof data?.error === "string" ? data.error : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -103,6 +128,10 @@ export const CallView = ({ meetingId }: Props) => {
     trpc.meetings.getOne.queryOptions({ id: meetingId })
   );
 
+  // Status when the page loaded. The live query is invalidated while finishing,
+  // so decisions about whether to run the session use this snapshot.
+  const initialStatusRef = useRef(meeting.status);
+
   // ── State ────────────────────────────────────────────────────────────────────
 
   const [phase, setPhaseState]         = useState<Phase>("starting");
@@ -111,13 +140,13 @@ export const CallView = ({ meetingId }: Props) => {
   const [secondsLeft, setSecondsLeft]  = useState(0);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [unanswered, setUnanswered]    = useState<QuestionRecord[]>([]);
-  // const [reviewStep, setReviewStep]    = useState(0); // current unanswered being reviewed
+  const [sessionSecondsLeft, setSessionSecondsLeft] = useState<number | null>(null);
 
   // ── Refs ─────────────────────────────────────────────────────────────────────
 
   const phaseRef        = useRef<Phase>("starting");
   const sessionStartRef = useRef(0);
-  const transcriptRef   = useRef<TranscriptItem[]>([]);
+  const transcriptRef   = useRef<TranscriptItem[]>([]); // mock mode only
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef   = useRef<Blob[]>([]);
@@ -130,11 +159,21 @@ export const CallView = ({ meetingId }: Props) => {
   const userTurnResolveRef     = useRef<((r: UserTurnResult) => void) | null>(null);
   const reviewDecisionResolveRef = useRef<((d: "answer" | "finish") => void) | null>(null);
 
-  // Skip flag: set before stopping MediaRecorder so onstop knows not to transcribe
+  // Skip flag: set before stopping MediaRecorder so onstop knows not to send audio
   const skipRecordingRef = useRef(false);
 
   // Set to true when finishSession is called — stops the async loop cleanly
   const isStoppingRef = useRef(false);
+
+  // Whole-interview clock (the server enforces the same limit).
+  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeUpRef       = useRef(false);
+
+  // Lifecycle guards. The session loop must run exactly once per page load
+  // (startMeeting is not repeatable), and survive React StrictMode's
+  // simulated unmount/remount in development.
+  const mountedRef    = useRef(false);
+  const runStartedRef = useRef(false);
 
   // Mock mode counters
   const mockResponseIdxRef = useRef(0);
@@ -144,16 +183,24 @@ export const CallView = ({ meetingId }: Props) => {
 
   const setPhase = (p: Phase) => { phaseRef.current = p; setPhaseState(p); };
 
+  const shouldStop = () => !mountedRef.current || isStoppingRef.current;
+
   const clearTimer = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
-  const addToTranscript = (speakerId: string, text: string) => {
+  const clearSessionClock = () => {
+    if (sessionTimerRef.current) { clearInterval(sessionTimerRef.current); sessionTimerRef.current = null; }
+  };
+
+  // In real sessions the server builds the transcript; this is only for mock mode.
+  const addMockTranscript = (speakerId: string, text: string) => {
+    if (!IS_MOCK) return;
     const now = Date.now() - sessionStartRef.current;
     transcriptRef.current.push({ speaker_id: speakerId, type: "text", text, start_ts: now, stop_ts: now + 500 });
   };
 
-  const playTTS = async (text: string): Promise<void> => {
+  const playTTS = async (): Promise<void> => {
     if (IS_MOCK) {
       await new Promise<void>((r) => setTimeout(r, 300));
       return;
@@ -162,7 +209,7 @@ export const CallView = ({ meetingId }: Props) => {
       const res = await fetch("/api/session/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ meetingId }),
       });
       if (!res.ok) return;
       const blob = await res.blob();
@@ -176,35 +223,44 @@ export const CallView = ({ meetingId }: Props) => {
     } catch { /* silent — text always visible */ }
   };
 
-  const getAgentResponse = async (history: ChatMessage[], questionIndex?: number): Promise<string> => {
+  // The server decides the prompt and progress from its own transcript.
+  const getAgentResponse = async (): Promise<string> => {
     if (IS_MOCK) {
       await new Promise<void>((r) => setTimeout(r, 400));
       const idx = mockResponseIdxRef.current++;
       return MOCK_AGENT_RESPONSES[Math.min(idx, MOCK_AGENT_RESPONSES.length - 1)];
     }
 
-    let systemPrompt = meeting.agent.instructions;
-
-    if (questionIndex === undefined) {
-      // Intro: present yourself and ask Q1 (technical)
-      systemPrompt += `\n\n---\nINTERVIEW PROGRESS: Start with a brief introduction and ask your first TECHNICAL question. The interview has ${TOTAL_QUESTIONS} questions total: ${TECH_QUESTIONS} technical first, then ${TOTAL_QUESTIONS - TECH_QUESTIONS} behavioral. Do NOT close the interview yet.`;
-    } else if (questionIndex === TOTAL_QUESTIONS - 1) {
-      // After last answer: close the interview
-      systemPrompt += `\n\n---\nINTERVIEW PROGRESS: The candidate just answered question ${TOTAL_QUESTIONS} of ${TOTAL_QUESTIONS} (the last one). Acknowledge their answer and close the interview professionally. Do NOT ask any more questions.`;
-    } else {
-      const nextQ = questionIndex + 2; // intro already had Q1
-      const type = nextQ <= TECH_QUESTIONS ? "TECHNICAL" : "BEHAVIORAL";
-      systemPrompt += `\n\n---\nINTERVIEW PROGRESS: The candidate just answered question ${questionIndex + 1} of ${TOTAL_QUESTIONS}. Acknowledge briefly and ask question ${nextQ} of ${TOTAL_QUESTIONS}, which must be a ${type} question. Do NOT close the interview — there are still ${TOTAL_QUESTIONS - nextQ} questions remaining after this one.`;
-    }
-
     const res = await fetch("/api/session/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: history, systemPrompt }),
+      body: JSON.stringify({ meetingId }),
     });
-    if (!res.ok) throw new Error("Error al obtener respuesta del agente");
+    if (res.status === 410) throw new TimeUpError();
+    if (!res.ok) throw new Error(await readApiError(res, "Error al obtener respuesta del agente"));
     const data = await res.json();
     return data.text as string;
+  };
+
+  // Sends the answer (or a skip) to the server, which transcribes and records it.
+  const submitAnswer = async (result: UserTurnResult): Promise<string> => {
+    if (IS_MOCK) return result.skipped ? "" : (result.mockText ?? "");
+
+    const formData = new FormData();
+    formData.append("meetingId", meetingId);
+    if (!result.skipped && result.audio && result.audio.size > 0) {
+      formData.append("audio", result.audio, "answer");
+    }
+
+    const res = await fetch("/api/session/transcribe", { method: "POST", body: formData });
+    if (res.status === 410) throw new TimeUpError();
+    if (!res.ok) throw new Error(await readApiError(res, "No se pudo registrar tu respuesta"));
+
+    const data = await res.json() as { text?: string; transcriptionFailed?: boolean };
+    if (data.transcriptionFailed) {
+      toast.error("No pudimos transcribir tu respuesta; se registró como sin respuesta.");
+    }
+    return data.text ?? "";
   };
 
   // ── Timer (starts when mic opens) ─────────────────────────────────────────────
@@ -224,6 +280,37 @@ export const CallView = ({ meetingId }: Props) => {
         }
       }
     }, 1000);
+  };
+
+  // ── Whole-interview clock ─────────────────────────────────────────────────────
+
+  // Called when the interview's total time runs out. An answer being recorded
+  // is still sent (the server allows a grace period); then the session ends.
+  const handleTimeUp = () => {
+    if (timeUpRef.current || isStoppingRef.current) return;
+    timeUpRef.current = true;
+    clearSessionClock();
+    toast.info("Se acabó el tiempo de la entrevista. Finalizando...");
+
+    if (phaseRef.current === "recording") {
+      clearTimer();
+      mediaRecorderRef.current?.stop(); // loop submits the answer, then finishes
+      return;
+    }
+    if (phaseRef.current === "transcribing") return; // loop finishes after submit
+    void finishSession();
+  };
+
+  const startSessionClock = () => {
+    // A few seconds early so the client never runs past the server's limit.
+    const deadline = Date.now() + MAX_SESSION_MS - 5000;
+    const tick = () => {
+      const left = Math.ceil((deadline - Date.now()) / 1000);
+      setSessionSecondsLeft(Math.max(0, left));
+      if (left <= 0) handleTimeUp();
+    };
+    tick();
+    sessionTimerRef.current = setInterval(tick, 1000);
   };
 
   // ── User-turn promise ─────────────────────────────────────────────────────────
@@ -257,7 +344,7 @@ export const CallView = ({ meetingId }: Props) => {
         clearTimer();
         const answer = MOCK_USER_ANSWERS[mockAnswerIdxRef.current % MOCK_USER_ANSWERS.length];
         mockAnswerIdxRef.current++;
-        resolveUserTurn({ text: answer, skipped: false });
+        resolveUserTurn({ audio: null, skipped: false, mockText: answer });
       }, 1500);
       return;
     }
@@ -271,31 +358,22 @@ export const CallView = ({ meetingId }: Props) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         clearTimer();
 
-        // Skip path: don't transcribe, just resolve as skipped
+        // Skip path: don't send audio, just resolve as skipped
         if (skipRecordingRef.current) {
           skipRecordingRef.current = false;
-          resolveUserTurn({ text: "", skipped: true });
+          resolveUserTurn({ audio: null, skipped: true });
           return;
         }
 
         if (isStoppingRef.current || phaseRef.current === "done") return;
 
-        setPhase("transcribing");
-
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        let text = "";
-        try {
-          const formData = new FormData();
-          formData.append("audio", blob, "recording.webm");
-          const res = await fetch("/api/session/transcribe", { method: "POST", body: formData });
-          if (res.ok) { const d = await res.json(); text = d.text ?? ""; }
-        } catch { /* fallback: empty answer */ }
-
-        resolveUserTurn({ text, skipped: false });
+        // Use the recorder's real MIME type (Safari records audio/mp4, not webm).
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        resolveUserTurn({ audio: blob, skipped: false });
       };
 
       recorder.start();
@@ -319,7 +397,7 @@ export const CallView = ({ meetingId }: Props) => {
       skipRecordingRef.current = true;
       mediaRecorderRef.current?.stop();
     } else if (phaseRef.current === "user-turn") {
-      resolveUserTurn({ text: "", skipped: true });
+      resolveUserTurn({ audio: null, skipped: true });
     }
   };
 
@@ -332,9 +410,10 @@ export const CallView = ({ meetingId }: Props) => {
     isStoppingRef.current = true;
     setPhase("finishing");
     clearTimer();
+    clearSessionClock();
 
     // Resolve any pending promises so the async loop can exit
-    resolveUserTurn({ text: "", skipped: true });
+    resolveUserTurn({ audio: null, skipped: true });
     reviewDecisionResolveRef.current?.("finish");
     reviewDecisionResolveRef.current = null;
 
@@ -345,17 +424,26 @@ export const CallView = ({ meetingId }: Props) => {
       await new Promise<void>((r) => setTimeout(r, 300));
     }
 
-    const jsonl = transcriptRef.current.map((item) => JSON.stringify(item)).join("\n");
+    const mockTranscript = IS_MOCK
+      ? transcriptRef.current.map((item) => JSON.stringify(item)).join("\n")
+      : undefined;
 
     try {
-      await endMeeting.mutateAsync({ id: meetingId, transcript: jsonl || " " });
+      await endMeeting.mutateAsync({ id: meetingId, mockTranscript });
       await queryClient.invalidateQueries(trpc.meetings.getOne.queryOptions({ id: meetingId }));
+      setPhase("done");
       toast.success("Entrevista finalizada. Generando resumen...");
       router.push(`/meetings/${meetingId}`);
     } catch (err) {
+      // Already finished (e.g. another tab) — just show the result page.
+      if (trpcErrorCode(err) === "CONFLICT") {
+        router.push(`/meetings/${meetingId}`);
+        return;
+      }
       console.error("[finishSession]", err);
-      toast.error("Error al finalizar la entrevista . Intenta de nuevo.");
-      setPhase("user-turn");
+      toast.error("Error al finalizar la entrevista. Intenta de nuevo.");
+      isStoppingRef.current = false;
+      setPhase("interrupted");
     }
   };
 
@@ -363,122 +451,149 @@ export const CallView = ({ meetingId }: Props) => {
 
   const startMeeting = useMutation(trpc.meetings.startMeeting.mutationOptions());
 
-  useEffect(() => {
-    if (meeting.status === "completed" || meeting.status === "cancelled") return;
-
-    sessionStartRef.current = Date.now();
-    let cancelled = false;
-
-    const run = async () => {
+  const runSession = async () => {
+    try {
+      // 1. Activate meeting (server allows this only once: upcoming → active)
       try {
-        // 1. Activate meeting
         await startMeeting.mutateAsync({ id: meetingId });
-        if (cancelled) return;
+      } catch (err) {
+        const code = trpcErrorCode(err);
+        if (code === "CONFLICT") { setPhase("interrupted"); return; }
+        if (code === "TOO_MANY_REQUESTS") {
+          toast.error((err as Error).message);
+          router.push(`/meetings/${meetingId}`);
+          return;
+        }
+        throw err;
+      }
+      void queryClient.invalidateQueries(trpc.meetings.getDailyUsage.queryOptions());
+      if (shouldStop()) return;
+      sessionStartRef.current = Date.now();
+      if (!IS_MOCK) startSessionClock();
 
-        // 2. Initial greeting + first question
+      // 2. Initial greeting + first question
+      setPhase("ai-thinking");
+      const introText = await getAgentResponse();
+      if (shouldStop()) return;
+
+      addMockTranscript(meeting.agent.id, introText);
+      currentTextRef.current = introText;
+      setCurrentText(introText);
+
+      setPhase("playing");
+      await playTTS();
+      if (shouldStop()) return;
+
+      // 3. 10-question loop
+      const records: QuestionRecord[] = [];
+
+      for (let i = 0; i < TOTAL_QUESTIONS; i++) {
+        if (shouldStop()) return;
+
+        currentTimerRef.current = IS_MOCK ? MOCK_TIMER_S : (i < TECH_QUESTIONS ? TECH_TIMER_S : SOFT_TIMER_S);
+        setQuestionIndex(i);
+        // Capture the current question text for the record
+        const agentQuestion = currentTextRef.current;
+        setPhase("user-turn");
+
+        const result = await waitForUserTurn();
+        if (shouldStop()) return;
+
+        setPhase("transcribing");
+        const text = await submitAnswer(result);
+        if (shouldStop()) return;
+        if (timeUpRef.current) { await finishSession(); return; }
+
+        const answered = !result.skipped && text.length > 0;
+        records.push({ agentMessage: agentQuestion, userAnswer: answered ? text : null });
+        addMockTranscript(sessionData?.user.id ?? "user", answered ? text : NO_ANSWER);
+
+        // Agent responds
         setPhase("ai-thinking");
-        const introText = await getAgentResponse([], undefined);
-        if (cancelled) return;
+        const agentText = await getAgentResponse();
+        if (shouldStop()) return;
 
-        addToTranscript(meeting.agent.id, introText);
-        currentTextRef.current = introText;
-        setCurrentText(introText);
-        let history: ChatMessage[] = [{ role: "assistant", content: introText }];
+        addMockTranscript(meeting.agent.id, agentText);
+        currentTextRef.current = agentText;
+        setCurrentText(agentText);
 
         setPhase("playing");
-        await playTTS(introText);
-        if (cancelled) return;
+        await playTTS();
+        if (shouldStop()) return;
+      }
 
-        // 3. 10-question loop
-        const records: QuestionRecord[] = [];
+      // 4. Check for unanswered questions
+      const skipped = records.filter((r) => r.userAnswer === null);
+      if (skipped.length > 0) {
+        setUnanswered(skipped);
+        setPhase("review");
 
-        for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-          if (cancelled || isStoppingRef.current) return;
+        const decision = await waitForReviewDecision();
+        if (shouldStop()) return;
 
-          currentTimerRef.current = IS_MOCK ? MOCK_TIMER_S : (i < TECH_QUESTIONS ? TECH_TIMER_S : SOFT_TIMER_S);
-          setQuestionIndex(i);
-          // Capture the current question text for the record
-          const agentQuestion = currentTextRef.current;
-          setPhase("user-turn");
+        if (decision === "answer") {
+          // Let user answer each skipped question (no agent response needed)
+          for (const q of skipped) {
+            if (shouldStop()) return;
+            currentTextRef.current = q.agentMessage;
+            setCurrentText(q.agentMessage);
+            currentTimerRef.current = IS_MOCK ? MOCK_TIMER_S : TECH_TIMER_S;
+            setPhase("user-turn");
 
-          const result = await waitForUserTurn();
-          if (cancelled || isStoppingRef.current) return;
+            const result = await waitForUserTurn();
+            if (shouldStop()) return;
 
-          records.push({
-            agentMessage: agentQuestion,
-            userAnswer: result.skipped || !result.text ? null : result.text,
-          });
+            setPhase("transcribing");
+            const text = await submitAnswer(result);
+            if (shouldStop()) return;
+            if (timeUpRef.current) { await finishSession(); return; }
 
-          const userText = (!result.skipped && result.text) ? result.text : "(sin respuesta)";
-          addToTranscript(sessionData?.user.id ?? "user", userText);
-          history = [
-            ...history,
-            { role: "user", content: userText },
-          ];
-
-          // Agent responds
-          setPhase("ai-thinking");
-          const agentText = await getAgentResponse(history, i);
-          if (cancelled || isStoppingRef.current) return;
-
-          addToTranscript(meeting.agent.id, agentText);
-          history = [...history, { role: "assistant", content: agentText }];
-          currentTextRef.current = agentText;
-          setCurrentText(agentText);
-
-          setPhase("playing");
-          await playTTS(agentText);
-          if (cancelled || isStoppingRef.current) return;
-        }
-
-        // 4. Check for unanswered questions
-        const skipped = records.filter((r) => r.userAnswer === null);
-        if (skipped.length > 0) {
-          setUnanswered(skipped);
-          // setReviewStep(0);
-          setPhase("review");
-
-          const decision = await waitForReviewDecision();
-          if (cancelled || isStoppingRef.current) return;
-
-          if (decision === "answer") {
-            // Let user answer each skipped question (no agent response needed)
-            for (let idx = 0; idx < skipped.length; idx++) {
-              if (cancelled || isStoppingRef.current) return;
-              const q = skipped[idx];
-              // setReviewStep(idx);
-              currentTextRef.current = q.agentMessage;
-              setCurrentText(q.agentMessage);
-              currentTimerRef.current = IS_MOCK ? MOCK_TIMER_S : TECH_TIMER_S;
-              setPhase("user-turn");
-
-              const result = await waitForUserTurn();
-              if (cancelled || isStoppingRef.current) return;
-
-              const reviewText = (!result.skipped && result.text) ? result.text : "(sin respuesta)";
-              addToTranscript(sessionData?.user.id ?? "user", reviewText);
-              history = [...history, { role: "user", content: reviewText }];
-            }
+            const answered = !result.skipped && text.length > 0;
+            addMockTranscript(sessionData?.user.id ?? "user", answered ? text : NO_ANSWER);
           }
         }
-
-        // 5. Done
-        if (!cancelled && !isStoppingRef.current) {
-          await finishSession();
-        }
-      } catch (err) {
-        if (!cancelled && !isStoppingRef.current) {
-          console.error("[runSession]", err);
-          toast.error("Error durante la entrevista . Puedes finalizar manualmente.");
-        }
       }
-    };
 
-    run();
+      // 5. Done
+      if (!shouldStop()) {
+        await finishSession();
+      }
+    } catch (err) {
+      if (err instanceof TimeUpError && !shouldStop()) {
+        timeUpRef.current = true;
+        toast.info("Se acabó el tiempo de la entrevista. Finalizando...");
+        await finishSession();
+        return;
+      }
+      if (!shouldStop()) {
+        console.error("[runSession]", err);
+        toast.error(err instanceof Error ? err.message : "Error durante la entrevista.");
+        setPhase("interrupted");
+      }
+    }
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    const status = initialStatusRef.current;
+    if (!runStartedRef.current) {
+      runStartedRef.current = true;
+      if (status === "upcoming") {
+        runSession();
+      } else if (status === "active") {
+        // A reload or a second tab: the server-side session cannot be resumed
+        // from scratch, so offer to finish with what was recorded.
+        setPhase("interrupted");
+      }
+    }
 
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
       clearTimer();
+      // The session clock is only cleared on real unmount; StrictMode's
+      // simulated remount happens before the clock is started.
+      clearSessionClock();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -499,10 +614,18 @@ export const CallView = ({ meetingId }: Props) => {
       </div>
     );
   }
+  if (initialStatusRef.current === "processing") {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <ErrorState title="Esta entrevista ya finalizó" description="Estamos generando tu reporte; puedes verlo en el historial de entrevistas" />
+      </div>
+    );
+  }
 
   const isTimerWarning   = secondsLeft > 0 && secondsLeft <= 15;
   const progressPercent  = (questionIndex / TOTAL_QUESTIONS) * 100;
   const isUserTurnActive = phase === "user-turn" || phase === "recording";
+  const showSessionUI    = phase !== "review" && phase !== "interrupted";
 
 
   return (
@@ -524,7 +647,19 @@ export const CallView = ({ meetingId }: Props) => {
               MODO PRUEBA
             </Badge>
           )}
-          {phase !== "review" && (
+          {sessionSecondsLeft !== null && phase !== "interrupted" && phase !== "finishing" && phase !== "done" && (
+            <Badge
+              variant="outline"
+              title={`Tiempo total restante (máximo ${MAX_SESSION_MINUTES} min)`}
+              className={cn(
+                "text-xs font-mono tabular-nums",
+                sessionSecondsLeft <= 60 ? "text-red-300 border-red-500/60" : "text-slate-300 border-slate-600",
+              )}
+            >
+              ⏱ {formatClock(sessionSecondsLeft)}
+            </Badge>
+          )}
+          {showSessionUI && (
             <Badge variant="outline" className="text-slate-300 border-slate-600 text-xs">
               {Math.min(questionIndex + 1, TOTAL_QUESTIONS)} / {TOTAL_QUESTIONS}
             </Badge>
@@ -542,7 +677,7 @@ export const CallView = ({ meetingId }: Props) => {
       </div>
 
       {/* ── Progress bar ── */}
-      {phase !== "review" && (
+      {showSessionUI && (
         <div className="h-0.5 bg-slate-700">
           <div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${progressPercent}%` }} />
         </div>
@@ -550,6 +685,23 @@ export const CallView = ({ meetingId }: Props) => {
 
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8 max-w-2xl mx-auto w-full">
+
+        {/* ── INTERRUPTED phase ── */}
+        {phase === "interrupted" && (
+          <div className="w-full flex flex-col items-center gap-5 text-center">
+            <TriangleAlertIcon className="size-10 text-amber-400" />
+            <div>
+              <h2 className="text-xl font-semibold text-slate-100">La entrevista se interrumpió</h2>
+              <p className="text-sm text-slate-400 mt-1">
+                No es posible reanudarla. Puedes finalizarla y generar el reporte con las respuestas que ya se registraron.
+              </p>
+            </div>
+            <Button onClick={finishSession} className="bg-blue-600 hover:bg-blue-500 gap-2">
+              <CheckIcon className="size-4" />
+              Finalizar y generar reporte
+            </Button>
+          </div>
+        )}
 
         {/* ── REVIEW phase ── */}
         {phase === "review" && (
@@ -585,14 +737,14 @@ export const CallView = ({ meetingId }: Props) => {
                 onClick={() => { reviewDecisionResolveRef.current?.("finish"); reviewDecisionResolveRef.current = null; }}
               >
                 <CheckIcon className="size-4" />
-                Finalizar entrevista 
+                Finalizar entrevista
               </Button>
             </div>
           </div>
         )}
 
         {/* ── Normal phases ── */}
-        {phase !== "review" && (
+        {showSessionUI && (
           <>
             {/* Agent message card */}
             <div className="w-full rounded-2xl bg-slate-800/60 border border-slate-700/60 p-6 min-h-[120px] flex items-start">
@@ -607,7 +759,7 @@ export const CallView = ({ meetingId }: Props) => {
               {(phase === "playing" || isUserTurnActive || phase === "transcribing") && (
                 <p className="text-base leading-relaxed text-slate-100">{currentText}</p>
               )}
-              {phase === "finishing" && (
+              {(phase === "finishing" || phase === "done") && (
                 <div className="flex items-center gap-3 text-slate-400">
                   <LoaderIcon className="animate-spin size-5 shrink-0" />
                   <span className="text-sm">Finalizando entrevista y generando resumen...</span>
@@ -626,10 +778,7 @@ export const CallView = ({ meetingId }: Props) => {
                     ? isTimerWarning ? "text-red-400" : "text-slate-200"
                     : "text-slate-700 select-none" // dim before recording starts
                 )}>
-                  {phase === "recording"
-                    ? `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`
-                    : `${String(Math.floor(currentTimerRef.current / 60)).padStart(2, "0")}:${String(currentTimerRef.current % 60).padStart(2, "0")}`
-                  }
+                  {formatClock(phase === "recording" ? secondsLeft : currentTimerRef.current)}
                 </div>
 
                 {/* PTT button */}
@@ -682,7 +831,7 @@ export const CallView = ({ meetingId }: Props) => {
       </div>
 
       {/* ── Footer ── */}
-      {phase !== "review" && (
+      {showSessionUI && (
         <div className="px-6 py-3 text-center text-xs text-slate-600 border-t border-slate-700/50">
           {questionIndex < TECH_QUESTIONS
             ? `Pregunta técnica ${questionIndex + 1} de ${TECH_QUESTIONS} — tienes ${TECH_TIMER_S}s para responder`

@@ -25,6 +25,10 @@ export const meetingsProcessing = inngest.createFunction(
     // as completed so Inngest does not retry a job that can never succeed.
     if (!meeting) return { skipped: "meeting_or_account_deleted" };
 
+    // Only meetings that endMeeting moved to "processing" are evaluated. This
+    // makes duplicate events a no-op (no double achievements or corrections).
+    if (meeting.status !== "processing") return { skipped: `status_${meeting.status}` };
+
     await generateMeetingSummary(meeting.id, meeting.transcriptUrl ?? "", data.userId);
   },
 );
