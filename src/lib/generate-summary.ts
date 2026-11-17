@@ -2,13 +2,13 @@ import OpenAI from "openai";
 import { db } from "@/db";
 import { meetings, user, corrections } from "@/db/schema";
 import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
-import { awardAchievements } from "@/lib/award-achievements";
+import { buildAchievementWrites } from "@/lib/award-achievements";
 import { AI_MODELS } from "@/lib/ai-models";
 import { getTopicTitle } from "@/lib/interview-topics";
 import { NO_ANSWER, TOTAL_QUESTIONS } from "@/modules/call/constants";
-import { loadPlan, mapAnswersToPlan, recordPlanResults, type StoredQuestion } from "@/modules/call/server/plan";
+import { buildPlanResultWrites, loadPlan, mapAnswersToPlan, type StoredQuestion } from "@/modules/call/server/plan";
 import { overallTechnicalScore } from "@/modules/call/report-scoring";
 
 type TranscriptItem = {
@@ -191,205 +191,247 @@ function scoresFromReport(plan: StoredQuestion[], answers: Map<number, string>, 
   return scores;
 }
 
-// ── Main function ─────────────────────────────────────────────────────────────
+// ── Evaluation job, split into steps ─────────────────────────────────────────
+// Called from the Inngest function (src/inngest/functions.ts), one step each:
+//   prepare → evaluate → rewards → corrections → save report
+// Errors are NOT swallowed: they propagate so Inngest retries the step, and
+// after the last retry onFailure marks the meeting "failed" (the user can
+// retry). Every write step is idempotent, so retries never duplicate data.
+// The report is saved last: until then the meeting stays "processing".
 
-export async function generateMeetingSummary(
-  meetingId: string,
-  transcriptText: string,
-  userId?: string,
-): Promise<void> {
+const NO_ITEMS_REPORT: InterviewReport = {
+  summary: "La entrevista no tuvo respuestas registradas.",
+  englishLevel: "—",
+  scores: {
+    grammar:            { score: 0, cefrLevel: "—", notes: "" },
+    vocabulary:         { score: 0, cefrLevel: "—", notes: "" },
+    fluency:            { score: 0, cefrLevel: "—", notes: "" },
+    technicalKnowledge: { score: 0, notes: "" },
+  },
+  questions: [],
+  overallStrengths: [],
+  overallImprovements: [],
+  recommendation: "",
+};
+
+const NO_ANSWERS_REPORT: InterviewReport = {
+  summary: "El candidato no proporcionó respuestas durante la entrevista.",
+  englishLevel: "N/A",
+  scores: {
+    grammar:            { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
+    vocabulary:         { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
+    fluency:            { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
+    technicalKnowledge: { score: 0,                   notes: "No hubo respuestas para evaluar." },
+  },
+  questions:           [],
+  overallStrengths:    [],
+  overallImprovements: ["Participar activamente respondiendo las preguntas del entrevistador."],
+  recommendation: "No fue posible generar una evaluación porque no se registraron respuestas. Intenta de nuevo y responde las preguntas cuando sea tu turno.",
+};
+
+const meetingScope = (meetingId: string, userId: string) =>
+  and(eq(meetings.id, meetingId), eq(meetings.userId, userId));
+
+/** The account may be deleted while the job runs (cascade deletes the meeting). */
+async function meetingExists(meetingId: string, userId: string) {
+  const [row] = await db.select({ id: meetings.id }).from(meetings).where(meetingScope(meetingId, userId));
+  return !!row;
+}
+
+function parseTranscriptItems(transcriptText: string | null | undefined): TranscriptItem[] {
+  const text = transcriptText?.trim();
+  if (!text) return [];
   try {
-    const meetingScope = () => userId
-      ? and(eq(meetings.id, meetingId), eq(meetings.userId, userId))
-      : eq(meetings.id, meetingId);
-    const [initialMeeting] = await db
-      .select({ id: meetings.id })
-      .from(meetings)
-      .where(meetingScope());
-    if (!initialMeeting) return;
-
-    // 1. Parse transcript
-    let items: TranscriptItem[] = [];
-    const text = transcriptText?.trim();
-    if (text && text !== " ") {
-      try {
-        items = JSONL.parse<TranscriptItem>(text);
-      } catch {
-        console.error("[generateSummary] JSONL parse failed for", meetingId);
-      }
-    }
-
-    if (items.length === 0) {
-      await db.update(meetings)
-        .set({ status: "completed", summary: JSON.stringify({ summary: "La entrevista no tuvo respuestas registradas.", englishLevel: "—", scores: { grammar: { score: 0, cefrLevel: "—", notes: "" }, vocabulary: { score: 0, cefrLevel: "—", notes: "" }, fluency: { score: 0, cefrLevel: "—", notes: "" }, technicalKnowledge: { score: 0, notes: "" } }, questions: [], overallStrengths: [], overallImprovements: [], recommendation: "" } satisfies InterviewReport) })
-        .where(meetingScope());
-      return;
-    }
-
-    // 2. Build the evaluator input. New interviews have a question plan; older
-    //    ones (started before plans existed) are evaluated from the transcript.
-    const [meetingRow] = await db
-      .select({ agentId: meetings.agentId })
-      .from(meetings)
-      .where(eq(meetings.id, meetingId));
-    const plan = await loadPlan(meetingId);
-    const hasPlan = !!meetingRow && plan.length === TOTAL_QUESTIONS;
-
-    let hasRealAnswers: boolean;
-    let systemPrompt = SYSTEM_PROMPT;
-    let userContent: string;
-    let answers = new Map<number, string>();
-
-    if (hasPlan) {
-      answers = mapAnswersToPlan(items, meetingRow.agentId, plan.length);
-      hasRealAnswers = [...answers.values()].some((a) => a !== NO_ANSWER && a.trim().length > 0);
-      systemPrompt = `${SYSTEM_PROMPT}\n\n${PLAN_RULES}`;
-      userContent =
-        "Here is the interview plan with the candidate's answers:\n\n" +
-        JSON.stringify(buildPlanInput(plan, answers), null, 2);
-    } else {
-      const speakerIds = [...new Set(items.map((i) => i.speaker_id))];
-      const dbUsers = await db.select().from(user).where(inArray(user.id, speakerIds));
-      const agentSpeakers = PREDEFINED_AGENTS
-        .filter((a) => speakerIds.includes(a.id))
-        .map((a) => ({ id: a.id, name: `${a.role} (Interviewer)` }));
-
-      const speakerMap = new Map<string, string>();
-      dbUsers.forEach((u) => speakerMap.set(u.id, u.name));
-      agentSpeakers.forEach((a) => speakerMap.set(a.id, a.name));
-
-      const readable = items.map((item) => ({
-        speaker: speakerMap.get(item.speaker_id) ?? "Unknown",
-        text: item.text,
-      }));
-
-      const userIds = new Set(dbUsers.map((u) => u.id));
-      hasRealAnswers = items
-        .filter((item) => userIds.has(item.speaker_id))
-        .some((item) => item.text !== NO_ANSWER && item.text.trim().length > 0);
-      userContent = "Here is the session transcript:\n\n" + JSON.stringify(readable, null, 2);
-    }
-
-    if (!hasRealAnswers) {
-      await db
-        .update(meetings)
-        .set({
-          status: "completed",
-          summary: JSON.stringify({
-            summary: "El candidato no proporcionó respuestas durante la entrevista.",
-            englishLevel: "N/A",
-            scores: {
-              grammar:            { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
-              vocabulary:         { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
-              fluency:            { score: 0, cefrLevel: "N/A", notes: "No hubo respuestas para evaluar." },
-              technicalKnowledge: { score: 0,                   notes: "No hubo respuestas para evaluar." },
-            },
-            questions:            [],
-            overallStrengths:     [],
-            overallImprovements:  ["Participar activamente respondiendo las preguntas del entrevistador."],
-            recommendation: "No fue posible generar una evaluación porque no se registraron respuestas. Intenta de nuevo y responde las preguntas cuando sea tu turno.",
-          } satisfies InterviewReport),
-        })
-        .where(eq(meetings.id, meetingId));
-      return;
-    }
-
-    // 5. Call the evaluation model
-    // Do not send transcript data to the provider if the account was deleted
-    // while the job was preparing the prompt.
-    const [meetingBeforeOpenAI] = await db
-      .select({ id: meetings.id })
-      .from(meetings)
-      .where(meetingScope());
-    if (!meetingBeforeOpenAI) return;
-
-    // 5. Call GPT-4o
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-    const completion = await openai.chat.completions.create({
-      model: AI_MODELS.evaluation,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ],
-    });
-
-    const raw = completion.choices[0].message.content ?? "{}";
-
-    // 4. Validate it parses correctly, then store
-    const report = JSON.parse(raw) as InterviewReport;
-    // The account may have been deleted while OpenAI was processing. Drop the
-    // result instead of recreating any data for an account that no longer exists.
-    const [meetingAfterOpenAI] = await db
-      .select({ id: meetings.id })
-      .from(meetings)
-      .where(meetingScope());
-    if (!meetingAfterOpenAI) return;
-
-    // With a plan, the per-question scores are the source of truth: unanswered
-    // questions are fixed at 1 and the overall technical score is computed
-    // here as their average instead of trusting the model's own number.
-    const planScores = hasPlan ? scoresFromReport(plan, answers, report) : null;
-    if (planScores) {
-      plan.forEach((q, index) => {
-        const fb = report.questions?.find((r) => r.position === q.position) ?? report.questions?.[index];
-        const score = planScores.get(q.position);
-        if (fb && score !== undefined) fb.technicalScore = score ?? 1;
-      });
-
-      const overall = overallTechnicalScore(
-        plan.map((q) => ({ kind: q.kind, score: planScores.get(q.position) })),
-      );
-      if (overall !== null && report.scores?.technicalKnowledge) {
-        report.scores.technicalKnowledge.score = overall;
-      }
-    }
-
-    await db
-      .update(meetings)
-      .set({ summary: planScores ? JSON.stringify(report) : raw, status: "completed" })
-      .where(meetingScope());
-
-    // 5. Award achievements
-    if (userId) {
-      await awardAchievements(meetingId, userId, report);
-    }
-
-    // 6. Save annotations as corrections in the vocabulary notebook
-    if (userId && report.questions?.length > 0) {
-      const entries = report.questions.flatMap((q) =>
-        (q.userAnswerAnnotated ?? [])
-          .filter((seg) => seg.annotation != null)
-          .map((seg) => ({
-            userId,
-            meetingId,
-            original: seg.text,
-            corrected: seg.annotation!.corrected,
-            type: seg.annotation!.type,
-            note: seg.annotation!.note,
-          }))
-      );
-      if (entries.length > 0) {
-        await db.insert(corrections).values(entries);
-      }
-    }
-
-    // 7. Per-question scores and topic progress (drives the next plans).
-    //    Isolated so a failure here never discards the report already saved.
-    if (userId && planScores) {
-      try {
-        await recordPlanResults(userId, plan, planScores);
-      } catch (err) {
-        console.error("[generateSummary] topic progress update failed for", meetingId, err);
-      }
-    }
-  } catch (err) {
-    console.error("[generateSummary] Error for meeting", meetingId, err);
-    await db
-      .update(meetings)
-      .set({ status: "completed", summary: "{}" })
-      .where(userId
-        ? and(eq(meetings.id, meetingId), eq(meetings.userId, userId))
-        : eq(meetings.id, meetingId));
+    return JSONL.parse<TranscriptItem>(text);
+  } catch {
+    console.error("[evaluation] JSONL parse failed");
+    return [];
   }
+}
+
+export type EvaluationJob =
+  | { kind: "gone" }
+  | { kind: "static"; report: InterviewReport }
+  | { kind: "llm"; agentId: string; hasPlan: boolean; systemPrompt: string; userContent: string };
+
+/** Step 1 — reads only. Decides whether the model needs to be called. */
+export async function prepareEvaluation(meetingId: string, userId: string): Promise<EvaluationJob> {
+  const [meeting] = await db
+    .select({ agentId: meetings.agentId, transcript: meetings.transcriptUrl })
+    .from(meetings)
+    .where(meetingScope(meetingId, userId));
+  if (!meeting) return { kind: "gone" };
+
+  const items = parseTranscriptItems(meeting.transcript);
+  if (items.length === 0) return { kind: "static", report: NO_ITEMS_REPORT };
+
+  // New interviews have a question plan; older ones are evaluated from the transcript.
+  const plan = await loadPlan(meetingId);
+  if (plan.length === TOTAL_QUESTIONS) {
+    const answers = mapAnswersToPlan(items, meeting.agentId, plan.length);
+    const hasRealAnswers = [...answers.values()].some((a) => a !== NO_ANSWER && a.trim().length > 0);
+    if (!hasRealAnswers) return { kind: "static", report: NO_ANSWERS_REPORT };
+    return {
+      kind: "llm",
+      agentId: meeting.agentId,
+      hasPlan: true,
+      systemPrompt: `${SYSTEM_PROMPT}\n\n${PLAN_RULES}`,
+      userContent:
+        "Here is the interview plan with the candidate's answers:\n\n" +
+        JSON.stringify(buildPlanInput(plan, answers), null, 2),
+    };
+  }
+
+  const speakerIds = [...new Set(items.map((i) => i.speaker_id))];
+  const dbUsers = await db.select().from(user).where(inArray(user.id, speakerIds));
+  const speakerMap = new Map<string, string>();
+  dbUsers.forEach((u) => speakerMap.set(u.id, u.name));
+  PREDEFINED_AGENTS
+    .filter((a) => speakerIds.includes(a.id))
+    .forEach((a) => speakerMap.set(a.id, `${a.role} (Interviewer)`));
+
+  const userIds = new Set(dbUsers.map((u) => u.id));
+  const hasRealAnswers = items
+    .filter((item) => userIds.has(item.speaker_id))
+    .some((item) => item.text !== NO_ANSWER && item.text.trim().length > 0);
+  if (!hasRealAnswers) return { kind: "static", report: NO_ANSWERS_REPORT };
+
+  const readable = items.map((item) => ({ speaker: speakerMap.get(item.speaker_id) ?? "Unknown", text: item.text }));
+  return {
+    kind: "llm",
+    agentId: meeting.agentId,
+    hasPlan: false,
+    systemPrompt: SYSTEM_PROMPT,
+    userContent: "Here is the session transcript:\n\n" + JSON.stringify(readable, null, 2),
+  };
+}
+
+export type EvaluationResult = {
+  report: InterviewReport;
+  /** [position, score] pairs; score null = unanswered. Only with a plan. */
+  planScores: [number, number | null][] | null;
+};
+
+/** Step 2 — calls the model. Returns null if the account was deleted meanwhile. */
+export async function runEvaluation(
+  meetingId: string,
+  userId: string,
+  job: Extract<EvaluationJob, { kind: "llm" }>,
+): Promise<EvaluationResult | null> {
+  // Never send transcript data to the provider for a deleted account.
+  if (!(await meetingExists(meetingId, userId))) return null;
+
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+  const completion = await openai.chat.completions.create({
+    model: AI_MODELS.evaluation,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: job.systemPrompt },
+      { role: "user", content: job.userContent },
+    ],
+  });
+
+  // A malformed report throws here, so the step is retried.
+  const report = JSON.parse(completion.choices[0]?.message.content ?? "") as InterviewReport;
+  if (!report || typeof report.summary !== "string" || !Array.isArray(report.questions)) {
+    throw new Error("Evaluation report is missing required fields");
+  }
+
+  if (!job.hasPlan) return { report, planScores: null };
+
+  // With a plan, the per-question scores are the source of truth: unanswered
+  // questions are fixed at 1 and the overall technical score is their average.
+  const [meeting] = await db.select({ agentId: meetings.agentId, transcript: meetings.transcriptUrl })
+    .from(meetings).where(meetingScope(meetingId, userId));
+  if (!meeting) return null;
+  const plan = await loadPlan(meetingId);
+  const answers = mapAnswersToPlan(parseTranscriptItems(meeting.transcript), meeting.agentId, plan.length);
+  const scores = scoresFromReport(plan, answers, report);
+
+  plan.forEach((q, index) => {
+    const fb = report.questions.find((r) => r.position === q.position) ?? report.questions[index];
+    const score = scores.get(q.position);
+    if (fb && score !== undefined) fb.technicalScore = score ?? 1;
+  });
+  const overall = overallTechnicalScore(plan.map((q) => ({ kind: q.kind, score: scores.get(q.position) })));
+  if (overall !== null && report.scores?.technicalKnowledge) {
+    report.scores.technicalKnowledge.score = overall;
+  }
+
+  return { report, planScores: [...scores.entries()] };
+}
+
+/**
+ * Step 3 — streak, achievements and topic progress, applied in ONE
+ * transaction together with meetings.rewards_applied_at. If that marker is
+ * already set (a retried run), nothing is applied again.
+ */
+export async function applyRewards(
+  meetingId: string,
+  userId: string,
+  agentId: string,
+  result: EvaluationResult,
+): Promise<"applied" | "already_applied" | "gone"> {
+  const [meeting] = await db
+    .select({ rewardsAppliedAt: meetings.rewardsAppliedAt })
+    .from(meetings)
+    .where(meetingScope(meetingId, userId));
+  if (!meeting) return "gone";
+  if (meeting.rewardsAppliedAt) return "already_applied";
+
+  const achievements = await buildAchievementWrites(userId, agentId, result.report);
+  const planWrites = result.planScores
+    ? buildPlanResultWrites(userId, await loadPlan(meetingId), new Map(result.planScores))
+    : [];
+  const marker = db
+    .update(meetings)
+    .set({ rewardsAppliedAt: new Date() })
+    .where(and(meetingScope(meetingId, userId), isNull(meetings.rewardsAppliedAt)));
+
+  await db.batch([marker, ...achievements.writes, ...planWrites]);
+  return "applied";
+}
+
+/** Step 4 — corrections for the vocabulary notebook. Replaces any previous ones for this meeting. */
+export async function saveCorrections(meetingId: string, userId: string, report: InterviewReport) {
+  if (!(await meetingExists(meetingId, userId))) return 0;
+
+  const entries = (report.questions ?? []).flatMap((q) =>
+    (q.userAnswerAnnotated ?? [])
+      .filter((seg) => seg.annotation != null)
+      .map((seg) => ({
+        userId,
+        meetingId,
+        original: seg.text,
+        corrected: seg.annotation!.corrected,
+        type: seg.annotation!.type,
+        note: seg.annotation!.note,
+      }))
+  );
+
+  const clear = db.delete(corrections).where(eq(corrections.meetingId, meetingId));
+  if (entries.length === 0) {
+    await clear;
+  } else {
+    await db.batch([clear, db.insert(corrections).values(entries)]);
+  }
+  return entries.length;
+}
+
+/** Last step — stores the report and completes the meeting. */
+export async function saveReport(meetingId: string, userId: string, report: InterviewReport) {
+  const updated = await db
+    .update(meetings)
+    .set({ summary: JSON.stringify(report), status: "completed", updatedAt: new Date() })
+    .where(and(meetingScope(meetingId, userId), eq(meetings.status, "processing")))
+    .returning({ id: meetings.id });
+  return updated.length > 0;
+}
+
+/** onFailure — the job ran out of retries; the user can retry from the report page. */
+export async function markEvaluationFailed(meetingId: string) {
+  await db
+    .update(meetings)
+    .set({ status: "failed", updatedAt: new Date() })
+    .where(and(eq(meetings.id, meetingId), eq(meetings.status, "processing")));
 }

@@ -306,29 +306,30 @@ export function mapAnswersToPlan(
 // ── Progress ──────────────────────────────────────────────────────────────────
 
 /**
- * Saves each question's score and updates the user's topic progress.
- * Unanswered questions keep their level but count as weak (score 1) so the
- * topic comes back soon.
+ * Writes that save each question's score and update the user's topic
+ * progress. Returned unexecuted so the caller can apply them atomically with
+ * the other rewards. Unanswered questions keep their level but count as weak
+ * (score 1) so the topic comes back soon.
  */
-export async function recordPlanResults(
+export function buildPlanResultWrites(
   userId: string,
   plan: StoredQuestion[],
   scores: Map<number, number | null>,
 ) {
   const now = new Date();
 
-  for (const q of plan) {
-    if (!scores.has(q.position)) continue; // the evaluator gave no score
+  return plan.flatMap((q) => {
+    if (!scores.has(q.position)) return []; // the evaluator gave no score
     const score = scores.get(q.position) ?? null;
     const level = q.kind === "technical" ? nextLevel(q.level, score) : 1;
     const effectiveScore = score ?? 1;
 
-    await db
+    const scoreWrite = db
       .update(meetingQuestions)
       .set({ score })
       .where(eq(meetingQuestions.id, q.id));
 
-    await db
+    const progressWrite = db
       .insert(userTopicProgress)
       .values({
         userId,
@@ -353,5 +354,7 @@ export async function recordPlanResults(
           updatedAt: now,
         },
       });
-  }
+
+    return [scoreWrite, progressWrite];
+  });
 }

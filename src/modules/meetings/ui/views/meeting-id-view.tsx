@@ -14,6 +14,7 @@ import { UpcomingState } from "../components/upcoming-state";
 import { ActiveState } from "../components/active-state";
 import { CancelledState } from "../components/cancelled-state";
 import { ProcessingState } from "../components/processing-state";
+import { FailedState } from "../components/failed-state";
 import { CompletedState } from "../components/completed-state";
 
 
@@ -58,6 +59,7 @@ export const MeetingIdView =({meetingId}:Props) => {
     const isCompleted = data.status === "completed";
     const isCancelled = data.status === "cancelled";
     const isProcessing = data.status === "processing";
+    const isFailed = data.status === "failed";
     const isUpcoming = data.status === "upcoming";
 
     return(
@@ -78,6 +80,7 @@ export const MeetingIdView =({meetingId}:Props) => {
             {isCancelled && <CancelledState/>}
             {isCompleted && <CompletedState data={data}/>}
             {isProcessing && <ProcessingState meetingId={meetingId}/>}
+            {isFailed && <FailedState meetingId={meetingId}/>}
             {isUpcoming && <UpcomingState
                 meetingId={meetingId}
             />}

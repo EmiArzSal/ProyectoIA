@@ -614,7 +614,7 @@ export const CallView = ({ meetingId }: Props) => {
       </div>
     );
   }
-  if (initialStatusRef.current === "processing") {
+  if (initialStatusRef.current === "processing" || initialStatusRef.current === "failed") {
     return (
       <div className="flex h-screen items-center justify-center">
         <ErrorState title="Esta entrevista ya finalizó" description="Estamos generando tu reporte; puedes verlo en el historial de entrevistas" />

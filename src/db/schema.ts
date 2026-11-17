@@ -64,7 +64,8 @@ export const agents = pgTable("agents", {
 
 });
 
-export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing","cancelled"]);
+// "failed": the evaluation job ran out of retries; the user can retry it.
+export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing","cancelled", "failed"]);
 
 export const meetings = pgTable("meetings", {
     id: text('id')
@@ -82,6 +83,9 @@ export const meetings = pgTable("meetings", {
     transcriptUrl: text('transcript_url'),
     recordingUrl: text('recording_url'),
     summary: text('summary'),
+    // Set in the same transaction that applies streak, achievements and topic
+    // progress, so a retried evaluation never applies them twice.
+    rewardsAppliedAt: timestamp('rewards_applied_at'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow()
 
