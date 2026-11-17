@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { db } from "@/db";
 import { meetings, user, corrections } from "@/db/schema";
 import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { awardAchievements } from "@/lib/award-achievements";
 import { AI_MODELS } from "@/lib/ai-models";
@@ -153,6 +153,15 @@ export async function generateMeetingSummary(
   userId?: string,
 ): Promise<void> {
   try {
+    const meetingScope = () => userId
+      ? and(eq(meetings.id, meetingId), eq(meetings.userId, userId))
+      : eq(meetings.id, meetingId);
+    const [initialMeeting] = await db
+      .select({ id: meetings.id })
+      .from(meetings)
+      .where(meetingScope());
+    if (!initialMeeting) return;
+
     // 1. Parse transcript
     let items: TranscriptItem[] = [];
     const text = transcriptText?.trim();
@@ -167,7 +176,7 @@ export async function generateMeetingSummary(
     if (items.length === 0) {
       await db.update(meetings)
         .set({ status: "completed", summary: JSON.stringify({ summary: "La entrevista no tuvo respuestas registradas.", englishLevel: "—", scores: { grammar: { score: 0, cefrLevel: "—", notes: "" }, vocabulary: { score: 0, cefrLevel: "—", notes: "" }, fluency: { score: 0, cefrLevel: "—", notes: "" }, technicalKnowledge: { score: 0, notes: "" } }, questions: [], overallStrengths: [], overallImprovements: [], recommendation: "" } satisfies InterviewReport) })
-        .where(eq(meetings.id, meetingId));
+        .where(meetingScope());
       return;
     }
 
@@ -219,6 +228,15 @@ export async function generateMeetingSummary(
     }
 
     // 5. Call the evaluation model
+    // Do not send transcript data to the provider if the account was deleted
+    // while the job was preparing the prompt.
+    const [meetingBeforeOpenAI] = await db
+      .select({ id: meetings.id })
+      .from(meetings)
+      .where(meetingScope());
+    if (!meetingBeforeOpenAI) return;
+
+    // 5. Call GPT-4o
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const completion = await openai.chat.completions.create({
       model: AI_MODELS.evaluation,
@@ -236,10 +254,18 @@ export async function generateMeetingSummary(
 
     // 4. Validate it parses correctly, then store
     const report = JSON.parse(raw) as InterviewReport;
+    // The account may have been deleted while OpenAI was processing. Drop the
+    // result instead of recreating any data for an account that no longer exists.
+    const [meetingAfterOpenAI] = await db
+      .select({ id: meetings.id })
+      .from(meetings)
+      .where(meetingScope());
+    if (!meetingAfterOpenAI) return;
+
     await db
       .update(meetings)
       .set({ summary: raw, status: "completed" })
-      .where(eq(meetings.id, meetingId));
+      .where(meetingScope());
 
     // 5. Award achievements
     if (userId) {
@@ -269,6 +295,8 @@ export async function generateMeetingSummary(
     await db
       .update(meetings)
       .set({ status: "completed", summary: "{}" })
-      .where(eq(meetings.id, meetingId));
+      .where(userId
+        ? and(eq(meetings.id, meetingId), eq(meetings.userId, userId))
+        : eq(meetings.id, meetingId));
   }
 }

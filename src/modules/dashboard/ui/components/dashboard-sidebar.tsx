@@ -70,20 +70,17 @@ export function DashboardSidebar({ ...props }: React.ComponentProps<typeof Sideb
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <div className="flex aspect-square size-10 items-center justify-center rounded-lg text-sidebar-primary-foreground">
                   <Image
                     src="/logo.png"
                     alt="Agora"
-                    width={24}
-                    height={24}
-                    className="size-6 object-contain"
+                    width={30}
+                    height={30}
+                    className="size-8 object-contain"
                   />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold text-base">Agora</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    Entrevistas tech
-                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>

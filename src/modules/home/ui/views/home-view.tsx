@@ -66,7 +66,7 @@ export const HomeView = () => {
       <div className="flex flex-col gap-y-2">
         <h1 className="text-3xl font-bold">¡Bienvenido a Agora!</h1>
         <p className="text-muted-foreground">
-          Prepárate para entrevistas técnicas en inglés y mejora tus habilidades en IT
+          Prepárate para entrevistas técnicas en inglés y refuerza tus conocimientos en tecnología.
         </p>
       </div>
 
@@ -77,7 +77,7 @@ export const HomeView = () => {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-x-2">
                 <VideoIcon className="size-5 text-blue-600" />
-                <CardTitle className="text-lg">Nueva Entrevista IT</CardTitle>
+                <CardTitle className="text-lg">Nueva Entrevista</CardTitle>
               </div>
             </CardHeader>
             <CardContent>

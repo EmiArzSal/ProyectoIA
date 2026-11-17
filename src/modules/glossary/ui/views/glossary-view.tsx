@@ -20,8 +20,44 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { DictionaryResult, DictionaryLookupResponse } from "@/app/api/dictionary/lookup/route";
+import type { DictionaryResult, DictionaryLookupResponse } from "@/modules/dictionary/server/lookup";
 import { Volume2Icon } from "lucide-react";
+
+async function playPronunciation(word: string, audioUrl?: string) {
+  let sourceUrl = audioUrl;
+
+  // Older saved entries store the dictionaryapi.dev URL, which currently returns 502.
+  // Refresh it through our authenticated lookup, which resolves the Wikimedia audio file.
+  if (!sourceUrl || sourceUrl.startsWith("https://api.dictionaryapi.dev/media/pronunciations/")) {
+    try {
+      const response = await fetch(`/api/dictionary/lookup?word=${encodeURIComponent(word)}&lang=en`);
+      const data = await response.json() as DictionaryLookupResponse;
+      sourceUrl = response.ok ? data.audioUrl : undefined;
+    } catch {
+      sourceUrl = undefined;
+    }
+  }
+
+  if (!sourceUrl) {
+    toast.error("No hay una grabación disponible para esta palabra.");
+    return;
+  }
+
+  const audio = new Audio(sourceUrl);
+  let errorShown = false;
+  const showError = () => {
+    if (errorShown) return;
+    errorShown = true;
+    toast.error("No se pudo reproducir la pronunciación. Intenta de nuevo.");
+  };
+
+  audio.addEventListener("error", showError, { once: true });
+  try {
+    await audio.play();
+  } catch {
+    showError();
+  }
+}
 
 // ── Flashcard ────────────────────────────────────────────────────────────────
 
@@ -222,6 +258,7 @@ function DictionaryTab() {
   const [phonetic, setPhonetic] = useState<string | undefined>();
   const [audioUrl, setAudioUrl] = useState<string | undefined>();
   const [notFound, setNotFound] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [selected, setSelected] = useState<DictionaryResult | null>(null);
   const [customDef, setCustomDef] = useState("");
 
@@ -237,6 +274,7 @@ function DictionaryTab() {
         setPhonetic(undefined);
         setAudioUrl(undefined);
         setNotFound(false);
+        setLookupError(null);
         setSelected(null);
         setCustomDef("");
       },
@@ -251,7 +289,11 @@ function DictionaryTab() {
 
   const handleLookup = async () => {
     const trimmed = word.trim();
-    if (!trimmed) return;
+    setLookupError(null);
+    if (!trimmed) {
+      setLookupError("Escribe una palabra para buscar.");
+      return;
+    }
     setLoading(true);
     setResults(null);
     setPhonetic(undefined);
@@ -262,6 +304,10 @@ function DictionaryTab() {
     try {
       const res = await fetch(`/api/dictionary/lookup?word=${encodeURIComponent(trimmed)}&lang=${lang}`);
       const data = await res.json() as DictionaryLookupResponse;
+      if (!res.ok) {
+        setLookupError(data.error?.message ?? "No se pudo consultar el diccionario. Intenta de nuevo.");
+        return;
+      }
       if (data.found && data.results.length > 0) {
         setResults(data.results);
         setPhonetic(data.phonetic);
@@ -270,7 +316,7 @@ function DictionaryTab() {
         setNotFound(true);
       }
     } catch {
-      setNotFound(true);
+      setLookupError("No se pudo conectar con el diccionario. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
@@ -310,7 +356,7 @@ function DictionaryTab() {
           <Input
             placeholder="ej. closure, refactor, abstraction..."
             value={word}
-            onChange={(e) => { setWord(e.target.value); setResults(null); setNotFound(false); setSelected(null); }}
+            onChange={(e) => { setWord(e.target.value); setResults(null); setNotFound(false); setLookupError(null); setSelected(null); }}
             onKeyDown={(e) => e.key === "Enter" && handleLookup()}
             maxLength={100}
             className="flex-1"
@@ -320,6 +366,10 @@ function DictionaryTab() {
             Buscar
           </Button>
         </div>
+
+        {lookupError && (
+          <p role="alert" className="text-sm text-destructive">{lookupError}</p>
+        )}
 
         {/* Results */}
         {results && (
@@ -333,9 +383,10 @@ function DictionaryTab() {
               {audioUrl && (
                 <button
                   type="button"
-                  onClick={() => new Audio(audioUrl).play()}
+                  onClick={() => playPronunciation(word.trim(), audioUrl)}
                   className="p-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                   title="Escuchar pronunciación"
+                  aria-label={`Escuchar pronunciación de ${word.trim()}`}
                 >
                   <Volume2Icon className="size-4" />
                 </button>
@@ -435,9 +486,10 @@ function DictionaryTab() {
                         {e.audioUrl && (
                           <button
                             type="button"
-                            onClick={() => new Audio(e.audioUrl!).play()}
+                            onClick={() => playPronunciation(e.word, e.audioUrl ?? undefined)}
                             className="p-1 rounded-full bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                             title="Escuchar pronunciación"
+                            aria-label={`Escuchar pronunciación de ${e.word}`}
                           >
                             <Volume2Icon className="size-3.5" />
                           </button>
@@ -477,7 +529,7 @@ export function GlossaryView() {
           <LibraryIcon className="size-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-xl font-semibold">Glosario personal</h1>
+          <h1 className="text-xl font-semibold">Mi glosario</h1>
           <p className="text-sm text-muted-foreground">Flashcards y diccionario para estudiar a tu ritmo</p>
         </div>
       </div>
