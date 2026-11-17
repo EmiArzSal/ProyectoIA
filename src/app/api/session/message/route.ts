@@ -1,24 +1,19 @@
-import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
-import { AI_MODELS, INTERVIEWER_MAX_TOKENS } from "@/lib/ai-models";
 import {
   SessionError,
   appendTurn,
-  buildSystemPrompt,
   loadActiveSession,
   sessionErrorResponse,
-  toChatHistory,
 } from "@/modules/call/server/session";
+import { composeAgentTurn } from "@/modules/call/server/turns";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-
-// The client only says which meeting it is in. The system prompt, the history
-// and the interview progress are all derived on the server from the stored
-// transcript, so this endpoint cannot be used as a general-purpose LLM proxy.
+// The client only says which meeting it is in. The interviewer's message is
+// composed on the server from the stored question plan and transcript, so
+// this endpoint cannot be used as a general-purpose LLM proxy.
 const bodySchema = z.object({ meetingId: z.string().min(1).max(64) });
 
 export async function POST(request: NextRequest) {
@@ -42,18 +37,7 @@ export async function POST(request: NextRequest) {
       throw new SessionError(409, "No es el turno del entrevistador");
     }
 
-    const completion = await openai.chat.completions.create({
-      model: AI_MODELS.interviewer,
-      max_tokens: INTERVIEWER_MAX_TOKENS,
-      messages: [
-        { role: "system", content: buildSystemPrompt(s.agent, s.state.userTurns) },
-        ...toChatHistory(s.items, s.agent.id),
-      ],
-    });
-
-    const text = completion.choices[0]?.message.content?.trim();
-    if (!text) throw new SessionError(502, "El entrevistador no respondió");
-
+    const text = await composeAgentTurn(s);
     await appendTurn(s, s.agent.id, text);
     return NextResponse.json({ text });
   } catch (err) {

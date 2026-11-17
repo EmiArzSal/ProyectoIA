@@ -3,8 +3,10 @@
 // for the final evaluation, where quality matters most.
 
 export const AI_MODELS = {
-  /** Interviewer turns (≈11 calls per interview). */
+  /** Short acknowledgment of each answer (≤10 tiny calls per interview). */
   interviewer: "gpt-4o-mini",
+  /** Writes the 10 questions of the plan (1 call per interview). */
+  planner: "gpt-4o-mini",
   /** Interviewer voice. */
   tts: "gpt-4o-mini-tts",
   /** Candidate answers. */
@@ -20,5 +22,5 @@ export const TTS_VOICE = "alloy";
 export const TTS_INSTRUCTIONS =
   "Speak as a calm, friendly, professional job interviewer. Use clear American English at a slightly slower than normal pace.";
 
-/** Upper bound for each interviewer reply; keeps turns short and cheap. */
-export const INTERVIEWER_MAX_TOKENS = 250;
+/** Upper bound for each interviewer acknowledgment (one short sentence). */
+export const INTERVIEWER_MAX_TOKENS = 60;

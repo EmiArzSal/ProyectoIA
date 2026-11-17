@@ -3,13 +3,13 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
-import type { ChatCompletionMessageParam } from "openai/resources/index.mjs";
 
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
 import { getPredefinedAgent, type PredefinedAgent } from "@/lib/predefined-agents";
 import type { StreamTranscriptItem } from "@/modules/meetings/types";
-import { MAX_SESSION_MS, NO_ANSWER, TECH_QUESTIONS, TOTAL_QUESTIONS } from "../constants";
+import { MAX_SESSION_MS, NO_ANSWER, TOTAL_QUESTIONS } from "../constants";
+import { loadPlan, type StoredQuestion } from "./plan";
 
 // The server is the single source of truth for an interview in progress:
 // the transcript is built here turn by turn (stored as JSONL in
@@ -44,6 +44,7 @@ export type SessionState = {
 export type ActiveSession = {
   meeting: Meeting;
   agent: PredefinedAgent;
+  plan: StoredQuestion[];
   items: StreamTranscriptItem[];
   state: SessionState;
 };
@@ -111,8 +112,14 @@ export async function loadActiveSession(
   const agent = getPredefinedAgent(meeting.agentId);
   if (!agent) throw new SessionError(404, "Agente no encontrado");
 
+  const plan = await loadPlan(meeting.id);
+  if (plan.length !== TOTAL_QUESTIONS) {
+    // Interviews started before question plans existed cannot continue.
+    throw new SessionError(409, "Esta entrevista se inició con una versión anterior. Finalízala para ver el reporte.");
+  }
+
   const items = parseTranscript(meeting.transcriptUrl);
-  return { meeting, agent, items, state: getSessionState(items, agent.id) };
+  return { meeting, agent, plan, items, state: getSessionState(items, agent.id) };
 }
 
 /**
@@ -143,29 +150,6 @@ export async function appendTurn(session: ActiveSession, speakerId: string, text
   if (!updated) {
     throw new SessionError(409, "La entrevista cambió de estado. Intenta de nuevo.");
   }
-}
-
-export function buildSystemPrompt(agent: PredefinedAgent, userTurns: number): string {
-  let progress: string;
-
-  if (userTurns === 0) {
-    progress = `Start with a brief introduction and ask your first TECHNICAL question. The interview has ${TOTAL_QUESTIONS} questions total: ${TECH_QUESTIONS} technical first, then ${TOTAL_QUESTIONS - TECH_QUESTIONS} behavioral. Do NOT close the interview yet.`;
-  } else if (userTurns >= TOTAL_QUESTIONS) {
-    progress = `The candidate just answered question ${TOTAL_QUESTIONS} of ${TOTAL_QUESTIONS} (the last one). Acknowledge their answer and close the interview professionally. Do NOT ask any more questions.`;
-  } else {
-    const nextQ = userTurns + 1;
-    const type = nextQ <= TECH_QUESTIONS ? "TECHNICAL" : "BEHAVIORAL";
-    progress = `The candidate just answered question ${userTurns} of ${TOTAL_QUESTIONS}. Acknowledge briefly and ask question ${nextQ} of ${TOTAL_QUESTIONS}, which must be a ${type} question. Do NOT close the interview — there are still ${TOTAL_QUESTIONS - nextQ} questions remaining after this one.`;
-  }
-
-  return `${agent.instructions}\n\n---\nINTERVIEW PROGRESS: ${progress}\nIf an answer is "${NO_ANSWER}", the candidate skipped that question; do not comment on it at length, just move on.`;
-}
-
-export function toChatHistory(items: StreamTranscriptItem[], agentId: string): ChatCompletionMessageParam[] {
-  return items.map((item) => ({
-    role: item.speaker_id === agentId ? "assistant" : "user",
-    content: item.text,
-  }));
 }
 
 export function lastAgentMessage(items: StreamTranscriptItem[], agentId: string): string | undefined {

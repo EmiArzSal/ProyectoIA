@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { meetings, user } from "@/db/schema";
+import { meetingQuestions, meetings, user } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE } from "@/constants";
 
@@ -13,6 +13,8 @@ import { MeetingStatus, StreamTranscriptItem } from "../types";
 import JSONL from "jsonl-parse-stringify";
 import { inngest } from "@/inngest/client";
 import { getDailyUsage, MAX_SESSIONS_GLOBAL_PER_DAY } from "@/modules/call/server/limits";
+import { buildInterviewPlan, savePlan } from "@/modules/call/server/plan";
+import { TOTAL_QUESTIONS } from "@/modules/call/constants";
 
 // Mock mode (UI development without API calls) is the only case where the
 // client may supply the transcript. Never honoured in production builds.
@@ -254,6 +256,10 @@ export const meetingsRouter = createTRPCRouter({
       if (!updatedMeeting) {
         throw new TRPCError({ code: "CONFLICT", message: "La entrevista cambió de estado. Intenta de nuevo." });
       }
+      if (agentChanged) {
+        // A plan left over from a failed start belongs to the old interviewer.
+        await db.delete(meetingQuestions).where(eq(meetingQuestions.meetingId, input.id));
+      }
       return updatedMeeting;
     }),
       create: protectedProcedure
@@ -303,6 +309,21 @@ export const meetingsRouter = createTRPCRouter({
             code: "TOO_MANY_REQUESTS",
             message: `La plataforma alcanzó su límite de ${MAX_SESSIONS_GLOBAL_PER_DAY} entrevistas por hoy. Intenta mañana.`,
           });
+        }
+
+        // Question plan: chosen and written before the interview goes active,
+        // so the clock does not run while it is generated. In mock mode the
+        // seed questions are used (no OpenAI call).
+        const [meeting] = await db
+          .select({ agentId: meetings.agentId })
+          .from(meetings)
+          .where(eq(meetings.id, input.id));
+        const plan = await buildInterviewPlan(userId, meeting.agentId, {
+          generate: !ALLOW_CLIENT_MOCK_TRANSCRIPT,
+        });
+        const saved = await savePlan(input.id, userId, plan);
+        if (saved.length !== TOTAL_QUESTIONS) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo preparar la entrevista. Intenta de nuevo." });
         }
 
         const [updated] = await db
@@ -400,6 +421,7 @@ export const meetingsRouter = createTRPCRouter({
           role: "Entrevistador",
           description: "",
           instructions: "",
+          interviewerName: "Entrevistador",
         };
 
         return { ...existingMeeting, agent };
@@ -471,6 +493,7 @@ export const meetingsRouter = createTRPCRouter({
           role: "Entrevistador",
           description: "",
           instructions: "",
+          interviewerName: "Entrevistador",
         },
       }));
 
