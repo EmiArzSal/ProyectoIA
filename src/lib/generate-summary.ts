@@ -218,14 +218,6 @@ export async function generateMeetingSummary(
       return;
     }
 
-    // Do not send transcript data to the provider if the account was deleted
-    // while the job was preparing the prompt.
-    const [meetingBeforeOpenAI] = await db
-      .select({ id: meetings.id })
-      .from(meetings)
-      .where(meetingScope());
-    if (!meetingBeforeOpenAI) return;
-
     // 5. Call the evaluation model
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const completion = await openai.chat.completions.create({
