@@ -392,6 +392,49 @@ export const meetingsRouter = createTRPCRouter({
 
         return updated;
       }),
+
+    // The evaluation ran out of retries (status "failed"): queue it again.
+    // Rewards are protected by meetings.rewards_applied_at, so a retry never
+    // applies streak, achievements or progress twice.
+    retryProcessing: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const userId = ctx.auth.user.id;
+        const [updated] = await db
+          .update(meetings)
+          .set({ status: "processing", updatedAt: new Date() })
+          .where(and(
+            eq(meetings.id, input.id),
+            eq(meetings.userId, userId),
+            eq(meetings.status, "failed"),
+          ))
+          .returning();
+
+        if (!updated) {
+          await assertMeetingExists(input.id, userId);
+          throw new TRPCError({ code: "CONFLICT", message: "Esta entrevista no tiene una evaluación fallida" });
+        }
+
+        try {
+          await inngest.send({
+            name: "meetings/processing",
+            data: { meetingId: updated.id, userId },
+          });
+        } catch (err) {
+          await db
+            .update(meetings)
+            .set({ status: "failed" })
+            .where(and(eq(meetings.id, updated.id), eq(meetings.status, "processing")));
+          console.error("[retryProcessing] inngest.send failed", err);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "No se pudo reintentar la evaluación. Intenta de nuevo.",
+          });
+        }
+
+        return updated;
+      }),
+
     getOne: protectedProcedure
     .input(z.object({id: z.string()}))
     .query(async ({input, ctx}) => {
@@ -440,6 +483,7 @@ export const meetingsRouter = createTRPCRouter({
           MeetingStatus.Completed,
           MeetingStatus.Processing,
           MeetingStatus.Cancelled,
+          MeetingStatus.Failed,
         ]).nullish(),
         period: z.enum(["week", "month", "quarter"]).nullish(),
       })
@@ -462,7 +506,7 @@ export const meetingsRouter = createTRPCRouter({
       const whereConditions = and(
         eq(meetings.userId, ctx.auth.user.id),
         search ? ilike(meetings.name, `%${search}%`) : undefined,
-        status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled") : undefined,
+        status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled" | "failed") : undefined,
         agentId ? eq(meetings.agentId, agentId) : undefined,
         fromDate ? gte(meetings.createdAt, fromDate) : undefined,
       );

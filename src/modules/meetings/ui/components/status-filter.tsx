@@ -4,6 +4,7 @@ import {
     ClockArrowUpIcon,
     VideoIcon,
     LoaderIcon,
+    TriangleAlertIcon,
 } from "lucide-react";
 
 import { CommandSelect } from "@/components/command-select";
@@ -60,6 +61,16 @@ const options = [
         <div className="flex items-center gap-x-2 capitalize">
         <CircleXIcon/>
         {MeetingStatus.Cancelled}
+        </div>
+    ),
+ },
+ {
+    id:MeetingStatus.Failed,
+    value: MeetingStatus.Failed,
+    children:(
+        <div className="flex items-center gap-x-2 capitalize">
+        <TriangleAlertIcon/>
+        {MeetingStatus.Failed}
         </div>
     ),
  },

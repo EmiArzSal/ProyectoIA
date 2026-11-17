@@ -1,9 +1,10 @@
 import { db } from "@/db";
 import { userStats, userAchievements, meetings } from "@/db/schema";
-import { eq, and, countDistinct } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { InterviewReport } from "@/lib/generate-summary";
 
 const CEFR_ORDER = ["A1", "A2", "B1", "B2", "C1", "C2"];
+const TOTAL_AGENTS = 5;
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
@@ -15,102 +16,97 @@ function yesterdayISO() {
   return d.toISOString().slice(0, 10);
 }
 
-export async function awardAchievements(
-  meetingId: string,
+/**
+ * Computes the streak/session update and new achievements for a finished
+ * interview and returns the writes WITHOUT running them, so the caller can
+ * apply them atomically together with other writes (see applyRewards in
+ * generate-summary.ts). Reads only; nothing is written here.
+ *
+ * `agentId` is this interview's interviewer: it counts toward "all_agents"
+ * even though the meeting is marked completed only after the rewards step.
+ */
+export async function buildAchievementWrites(
   userId: string,
+  agentId: string,
   report: InterviewReport,
-): Promise<string[]> {
+) {
   const today = todayISO();
   const yesterday = yesterdayISO();
 
-  // ── 1. Get or create user stats ──────────────────────────────────────────
-  let [stats] = await db.select().from(userStats).where(eq(userStats.userId, userId));
+  const [stats] = await db.select().from(userStats).where(eq(userStats.userId, userId));
+  const current = stats ?? { currentStreak: 0, longestStreak: 0, totalSessions: 0, lastPracticeDate: null };
 
-  if (!stats) {
-    [stats] = await db
-      .insert(userStats)
-      .values({ userId, currentStreak: 0, longestStreak: 0, totalSessions: 0 })
-      .returning();
-  }
-
-  // ── 2. Update streak ────────────────────────────────────────────────────
-  let newStreak = stats.currentStreak;
-
-  if (stats.lastPracticeDate === today) {
-    // Already practiced today — don't touch streak
-  } else if (stats.lastPracticeDate === yesterday) {
-    newStreak = stats.currentStreak + 1;
+  // ── Streak ─────────────────────────────────────────────────────────────────
+  let newStreak = current.currentStreak;
+  if (current.lastPracticeDate === today) {
+    // Already practiced today — don't touch the streak
+  } else if (current.lastPracticeDate === yesterday) {
+    newStreak = current.currentStreak + 1;
   } else {
     newStreak = 1; // Gap — reset
   }
+  const newLongest = Math.max(current.longestStreak, newStreak);
+  const newTotal   = current.totalSessions + 1;
 
-  const newLongest = Math.max(stats.longestStreak, newStreak);
-  const newTotal   = stats.totalSessions + 1;
+  const statsValues = {
+    currentStreak:    newStreak,
+    longestStreak:    newLongest,
+    totalSessions:    newTotal,
+    lastPracticeDate: today,
+    updatedAt:        new Date(),
+  };
+  const statsWrite = db
+    .insert(userStats)
+    .values({ userId, ...statsValues })
+    .onConflictDoUpdate({ target: userStats.userId, set: statsValues });
 
-  await db
-    .update(userStats)
-    .set({
-      currentStreak:    newStreak,
-      longestStreak:    newLongest,
-      totalSessions:    newTotal,
-      lastPracticeDate: today,
-      updatedAt:        new Date(),
-    })
-    .where(eq(userStats.userId, userId));
-
-  // ── 3. Get already earned achievements ──────────────────────────────────
+  // ── Achievements ───────────────────────────────────────────────────────────
   const earned = await db
     .select({ achievementId: userAchievements.achievementId })
     .from(userAchievements)
     .where(eq(userAchievements.userId, userId));
   const earnedIds = new Set(earned.map((e) => e.achievementId));
 
-  // ── 4. Check conditions ─────────────────────────────────────────────────
   const toAward: string[] = [];
-
   const check = (id: string, condition: boolean) => {
     if (condition && !earnedIds.has(id)) toAward.push(id);
   };
 
-  // Sessions
   check("first_session", newTotal >= 1);
   check("sessions_5",    newTotal >= 5);
   check("sessions_10",   newTotal >= 10);
   check("sessions_25",   newTotal >= 25);
 
-  // Streak
   check("streak_3",  newStreak >= 3);
   check("streak_7",  newStreak >= 7);
   check("streak_30", newStreak >= 30);
 
-  // CEFR level
-  const level = report.englishLevel?.toUpperCase();
-  const levelIdx = CEFR_ORDER.indexOf(level);
+  const levelIdx = CEFR_ORDER.indexOf(report.englishLevel?.toUpperCase());
   check("level_b1", levelIdx >= CEFR_ORDER.indexOf("B1"));
   check("level_b2", levelIdx >= CEFR_ORDER.indexOf("B2"));
   check("level_c1", levelIdx >= CEFR_ORDER.indexOf("C1"));
 
-  // No skips — none of the questions has "(sin respuesta)" as userAnswer
-  const noSkips = report.questions.every(
+  // No skips — requires at least one question, and none unanswered.
+  const questions = report.questions ?? [];
+  check("no_skips", questions.length > 0 && questions.every(
     (q) => q.userAnswer && q.userAnswer !== "(sin respuesta)"
-  );
-  check("no_skips", noSkips);
+  ));
 
-  // All agents — distinct agentIds in completed meetings
   if (!earnedIds.has("all_agents")) {
-    const [{ count }] = await db
-      .select({ count: countDistinct(meetings.agentId) })
+    const done = await db
+      .selectDistinct({ agentId: meetings.agentId })
       .from(meetings)
       .where(and(eq(meetings.userId, userId), eq(meetings.status, "completed")));
-    check("all_agents", Number(count) >= 5);
+    const agents = new Set([...done.map((d) => d.agentId), agentId]);
+    check("all_agents", agents.size >= TOTAL_AGENTS);
   }
 
-  // ── 5. Insert new achievements ──────────────────────────────────────────
-  if (toAward.length > 0) {
-    await db.insert(userAchievements).values(
-      toAward.map((achievementId) => ({ userId, achievementId, seen: false }))
-    );
-  }
+  const achievementsWrite = toAward.length > 0
+    ? db.insert(userAchievements).values(toAward.map((achievementId) => ({ userId, achievementId, seen: false })))
+    : null;
 
-  return toAward;
+  return {
+    writes: achievementsWrite ? [statsWrite, achievementsWrite] : [statsWrite],
+    awarded: toAward,
+  };
 }
