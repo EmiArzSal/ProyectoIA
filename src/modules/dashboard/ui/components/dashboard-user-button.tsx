@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { ChevronsUpDownIcon } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 
 export const DashboardUserButton = () => {
   const { data, isPending } = authClient.useSession();
@@ -40,7 +40,7 @@ export const DashboardUserButton = () => {
               <span className="truncate font-semibold">{userName}</span>
               <span className="truncate text-xs text-muted-foreground">{userEmail}</span>
             </div>
-            <ChevronsUpDownIcon className="ml-auto size-4" />
+            <ChevronRight className="ml-auto size-4" />
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
