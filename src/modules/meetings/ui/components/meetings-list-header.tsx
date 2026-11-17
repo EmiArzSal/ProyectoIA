@@ -9,6 +9,7 @@ import { PeriodFilter } from "./period-filter";
 import { useMeetingsFilters } from "../../hooks/use-meetings-filters";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { DEFAULT_PAGE } from "@/constants";
+import { DailyUsageBadge } from "./daily-usage";
 
 export const MeetingsListHeader = () => {
   const [filters, setFilters] = useMeetingsFilters();
@@ -35,6 +36,7 @@ export const MeetingsListHeader = () => {
             Revisa tus prácticas de entrevista anteriores.
           </p>
         </div>
+        <DailyUsageBadge />
       </div>
       <ScrollArea>
         <div className="flex items-center gap-x-2 p-1">

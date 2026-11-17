@@ -20,6 +20,10 @@ export const meetingsProcessing = inngest.createFunction(
 
     if (!meeting) throw new Error(`Meeting ${data.meetingId} not found`);
 
+    // Only meetings that endMeeting moved to "processing" are evaluated. This
+    // makes duplicate events a no-op (no double achievements or corrections).
+    if (meeting.status !== "processing") return { skipped: `status_${meeting.status}` };
+
     await generateMeetingSummary(meeting.id, meeting.transcriptUrl ?? "", data.userId);
   },
 );
