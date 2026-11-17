@@ -22,6 +22,7 @@ import {
   BookMarkedIcon,
   LibraryIcon,
   TrophyIcon,
+  TargetIcon,
 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
@@ -42,6 +43,11 @@ const navigationItems = [
     icon: BotIcon,
     label: "Entrevistadores",
     href: "/agentes",
+  },
+  {
+    icon: TargetIcon,
+    label: "Progreso",
+    href: "/progress",
   },
   {
     icon: BookMarkedIcon,
