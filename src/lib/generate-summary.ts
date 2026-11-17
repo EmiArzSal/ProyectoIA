@@ -6,6 +6,10 @@ import { and, eq, inArray } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { awardAchievements } from "@/lib/award-achievements";
 import { AI_MODELS } from "@/lib/ai-models";
+import { getTopicTitle } from "@/lib/interview-topics";
+import { NO_ANSWER, TOTAL_QUESTIONS } from "@/modules/call/constants";
+import { loadPlan, mapAnswersToPlan, recordPlanResults, type StoredQuestion } from "@/modules/call/server/plan";
+import { overallTechnicalScore } from "@/modules/call/report-scoring";
 
 type TranscriptItem = {
   speaker_id: string;
@@ -38,6 +42,8 @@ export type TechDimension = {
 };
 
 export type QuestionFeedback = {
+  /** Position in the question plan (1–10). Absent in reports made before plans existed. */
+  position?: number;
   question: string;
   userAnswer: string;
   userAnswerAnnotated: AnnotatedSegment[];
@@ -145,6 +151,46 @@ Guía CEFR:
 A1 = Principiante  A2 = Elemental  B1 = Intermedio  B2 = Intermedio alto  C1 = Avanzado  C2 = Competente
 `.trim();
 
+// Extra rules when the interview has a question plan (all new interviews).
+const PLAN_RULES = `
+MODO PLAN DE PREGUNTAS (sustituye a la transcripción):
+Recibirás la lista de las ${TOTAL_QUESTIONS} preguntas de la entrevista. Cada elemento trae: position, type ("technical" | "soft"), topic, level (1 = explicar el concepto, 2 = comparar, 3 = aplicar a un escenario sencillo), question, reference (conceptos esperados en preguntas técnicas, o criterios STAR en soft skills) y candidateAnswer.
+- Devuelve en "questions" exactamente un objeto por pregunta, en el mismo orden, y agrega a cada uno el campo "position" con el mismo número que recibiste.
+- "question" debe ser el texto de la pregunta tal como viene.
+- technicalScore en preguntas técnicas: qué tanto cubre la respuesta los conceptos de reference, considerando el nivel. En nivel 1 basta una explicación básica correcta; no exijas todos los conceptos. Es un puesto entry-level: califica con ese estándar.
+- technicalScore en soft skills: calidad de la respuesta según los criterios de reference (situación, acciones propias y resultado claros).
+- Si candidateAnswer es "${NO_ANSWER}": userAnswer "${NO_ANSWER}", userAnswerAnnotated [] y technicalScore 1.
+- scores.technicalKnowledge.notes se basa solo en las preguntas de tipo "technical" (su score se recalcula en el sistema a partir de los technicalScore).
+`.trim();
+
+function buildPlanInput(plan: StoredQuestion[], answers: Map<number, string>) {
+  return plan.map((q) => ({
+    position: q.position,
+    type: q.kind,
+    topic: getTopicTitle(q.topicId),
+    level: q.kind === "technical" ? q.level : undefined,
+    question: q.question,
+    reference: q.expectedConcepts,
+    candidateAnswer: answers.get(q.position) ?? NO_ANSWER,
+  }));
+}
+
+/** Per-position scores from the report; unanswered questions are null. */
+function scoresFromReport(plan: StoredQuestion[], answers: Map<number, string>, report: InterviewReport) {
+  const scores = new Map<number, number | null>();
+  plan.forEach((q, index) => {
+    if ((answers.get(q.position) ?? NO_ANSWER) === NO_ANSWER) {
+      scores.set(q.position, null);
+      return;
+    }
+    const fb = report.questions?.find((r) => r.position === q.position) ?? report.questions?.[index];
+    const raw = Math.round(Number(fb?.technicalScore));
+    if (Number.isFinite(raw) && raw >= 1) scores.set(q.position, Math.min(5, raw));
+    // Missing score: leave the topic's progress untouched.
+  });
+  return scores;
+}
+
 // ── Main function ─────────────────────────────────────────────────────────────
 
 export async function generateMeetingSummary(
@@ -180,28 +226,49 @@ export async function generateMeetingSummary(
       return;
     }
 
-    // 2. Resolve speaker names
-    const speakerIds = [...new Set(items.map((i) => i.speaker_id))];
-    const dbUsers = await db.select().from(user).where(inArray(user.id, speakerIds));
-    const agentSpeakers = PREDEFINED_AGENTS
-      .filter((a) => speakerIds.includes(a.id))
-      .map((a) => ({ id: a.id, name: `${a.role} (Interviewer)` }));
+    // 2. Build the evaluator input. New interviews have a question plan; older
+    //    ones (started before plans existed) are evaluated from the transcript.
+    const [meetingRow] = await db
+      .select({ agentId: meetings.agentId })
+      .from(meetings)
+      .where(eq(meetings.id, meetingId));
+    const plan = await loadPlan(meetingId);
+    const hasPlan = !!meetingRow && plan.length === TOTAL_QUESTIONS;
 
-    const speakerMap = new Map<string, string>();
-    dbUsers.forEach((u) => speakerMap.set(u.id, u.name));
-    agentSpeakers.forEach((a) => speakerMap.set(a.id, a.name));
+    let hasRealAnswers: boolean;
+    let systemPrompt = SYSTEM_PROMPT;
+    let userContent: string;
+    let answers = new Map<number, string>();
 
-    const readable = items.map((item) => ({
-      speaker: speakerMap.get(item.speaker_id) ?? "Unknown",
-      text: item.text,
-    }));
+    if (hasPlan) {
+      answers = mapAnswersToPlan(items, meetingRow.agentId, plan.length);
+      hasRealAnswers = [...answers.values()].some((a) => a !== NO_ANSWER && a.trim().length > 0);
+      systemPrompt = `${SYSTEM_PROMPT}\n\n${PLAN_RULES}`;
+      userContent =
+        "Here is the interview plan with the candidate's answers:\n\n" +
+        JSON.stringify(buildPlanInput(plan, answers), null, 2);
+    } else {
+      const speakerIds = [...new Set(items.map((i) => i.speaker_id))];
+      const dbUsers = await db.select().from(user).where(inArray(user.id, speakerIds));
+      const agentSpeakers = PREDEFINED_AGENTS
+        .filter((a) => speakerIds.includes(a.id))
+        .map((a) => ({ id: a.id, name: `${a.role} (Interviewer)` }));
 
-    // 3. Check if the user gave any real answers before calling GPT-4o
-    const userIds = new Set(dbUsers.map((u) => u.id));
-    const userItems = items.filter((item) => userIds.has(item.speaker_id));
-    const hasRealAnswers = userItems.some(
-      (item) => item.text !== "(sin respuesta)" && item.text.trim().length > 0
-    );
+      const speakerMap = new Map<string, string>();
+      dbUsers.forEach((u) => speakerMap.set(u.id, u.name));
+      agentSpeakers.forEach((a) => speakerMap.set(a.id, a.name));
+
+      const readable = items.map((item) => ({
+        speaker: speakerMap.get(item.speaker_id) ?? "Unknown",
+        text: item.text,
+      }));
+
+      const userIds = new Set(dbUsers.map((u) => u.id));
+      hasRealAnswers = items
+        .filter((item) => userIds.has(item.speaker_id))
+        .some((item) => item.text !== NO_ANSWER && item.text.trim().length > 0);
+      userContent = "Here is the session transcript:\n\n" + JSON.stringify(readable, null, 2);
+    }
 
     if (!hasRealAnswers) {
       await db
@@ -242,11 +309,8 @@ export async function generateMeetingSummary(
       model: AI_MODELS.evaluation,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: "Here is the session transcript:\n\n" + JSON.stringify(readable, null, 2),
-        },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
       ],
     });
 
@@ -262,9 +326,28 @@ export async function generateMeetingSummary(
       .where(meetingScope());
     if (!meetingAfterOpenAI) return;
 
+    // With a plan, the per-question scores are the source of truth: unanswered
+    // questions are fixed at 1 and the overall technical score is computed
+    // here as their average instead of trusting the model's own number.
+    const planScores = hasPlan ? scoresFromReport(plan, answers, report) : null;
+    if (planScores) {
+      plan.forEach((q, index) => {
+        const fb = report.questions?.find((r) => r.position === q.position) ?? report.questions?.[index];
+        const score = planScores.get(q.position);
+        if (fb && score !== undefined) fb.technicalScore = score ?? 1;
+      });
+
+      const overall = overallTechnicalScore(
+        plan.map((q) => ({ kind: q.kind, score: planScores.get(q.position) })),
+      );
+      if (overall !== null && report.scores?.technicalKnowledge) {
+        report.scores.technicalKnowledge.score = overall;
+      }
+    }
+
     await db
       .update(meetings)
-      .set({ summary: raw, status: "completed" })
+      .set({ summary: planScores ? JSON.stringify(report) : raw, status: "completed" })
       .where(meetingScope());
 
     // 5. Award achievements
@@ -288,6 +371,16 @@ export async function generateMeetingSummary(
       );
       if (entries.length > 0) {
         await db.insert(corrections).values(entries);
+      }
+    }
+
+    // 7. Per-question scores and topic progress (drives the next plans).
+    //    Isolated so a failure here never discards the report already saved.
+    if (userId && planScores) {
+      try {
+        await recordPlanResults(userId, plan, planScores);
+      } catch (err) {
+        console.error("[generateSummary] topic progress update failed for", meetingId, err);
       }
     }
   } catch (err) {

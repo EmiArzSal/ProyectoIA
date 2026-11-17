@@ -1,5 +1,5 @@
 import { nanoid } from  "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, pgEnum, integer, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
 
 export type CorrectionType = "grammar" | "vocabulary" | "technical";
 
@@ -136,3 +136,38 @@ export const corrections = pgTable("corrections", {
   note: text('note').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+// ── Interview plan ────────────────────────────────────────────────────────────
+// The 10 questions chosen for a meeting when it starts (6 technical + 4 soft).
+// Topics come from src/lib/interview-topics.ts.
+export const meetingQuestions = pgTable("meeting_questions", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  meetingId: text("meeting_id").notNull().references(() => meetings.id, { onDelete: 'cascade' }),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  position: integer('position').notNull(),          // 1–10
+  kind: text('kind').notNull(),                     // "technical" | "soft"
+  topicId: text('topic_id').notNull(),
+  level: integer('level').notNull(),                // 1–3 (soft: always 1)
+  question: text('question').notNull(),
+  expectedConcepts: jsonb('expected_concepts').$type<string[]>().notNull(),
+  source: text('source').notNull(),                 // "generated" | "seed"
+  score: integer('score'),                          // 1–5 after evaluation; null if unanswered
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("meeting_questions_meeting_position_idx").on(t.meetingId, t.position),
+  index("meeting_questions_user_topic_idx").on(t.userId, t.topicId),
+]);
+
+// Per-user mastery of each topic; drives adaptive topic selection.
+export const userTopicProgress = pgTable("user_topic_progress", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  topicId: text('topic_id').notNull(),
+  level: integer('level').notNull().default(1),     // next level to ask (1–3)
+  attempts: integer('attempts').notNull().default(0),
+  lastScore: integer('last_score'),                 // 1–5
+  bestScore: integer('best_score'),
+  lastPracticedAt: timestamp('last_practiced_at'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("user_topic_progress_user_topic_idx").on(t.userId, t.topicId),
+]);

@@ -4,11 +4,14 @@ export interface PredefinedAgent {
   instructions: string;
   role: string;
   description: string;
+  /** Name the interviewer uses to introduce itself. */
+  interviewerName: string;
 }
 
 export const PREDEFINED_AGENTS: PredefinedAgent[] = [
   {
     id: "ag_frontend_dev_01",
+    interviewerName: "Alex",
     name: "Frontend Developer Interviewer",
     role: "Frontend Developer",
     description:
@@ -45,6 +48,7 @@ TONE: Professional, calm, and neutral. Encouraging but realistic. You are evalua
   },
   {
     id: "ag_backend_dev_01",
+    interviewerName: "Jordan",
     name: "Backend Developer Interviewer",
     role: "Backend Developer",
     description:
@@ -81,6 +85,7 @@ TONE: Direct, technical, and professional. Neutral and fair. Not overly warm or 
   },
   {
     id: "ag_data_analyst_01",
+    interviewerName: "Morgan",
     name: "Data Analyst Interviewer",
     role: "Data Analyst",
     description:
@@ -118,6 +123,7 @@ TONE: Curious, analytical, and professional. You appreciate structured thinking 
   },
   {
     id: "ag_qa_engineer_01",
+    interviewerName: "Riley",
     name: "QA Engineer Interviewer",
     role: "QA Engineer",
     description:
@@ -155,6 +161,7 @@ TONE: Detail-oriented, methodical, and professional. You value precision and cle
   },
   {
     id: "ag_devops_eng_01",
+    interviewerName: "Sam",
     name: "DevOps Engineer Interviewer",
     role: "DevOps Engineer",
     description:
