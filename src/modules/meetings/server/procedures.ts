@@ -10,7 +10,7 @@ import { TRPCError } from "@trpc/server";
 import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
 import { getPredefinedAgent } from "@/lib/predefined-agents";
 import { generateAvatarUri } from "@/lib/avatar";
-import { MeetingStatus, StreamTranscriptItem } from "../types";
+import { MeetingStatus, TranscriptItem } from "../types";
 import JSONL from "jsonl-parse-stringify";
 import { inngest } from "@/inngest/client";
 import { getDailyUsage, MAX_SESSIONS_GLOBAL_PER_DAY } from "@/modules/call/server/limits";
@@ -135,18 +135,18 @@ export const meetingsRouter = createTRPCRouter({
         message: "Entrevista no encontrada"
       });
     }
-    if(!existingMeeting.transcriptUrl){
+    if(!existingMeeting.transcript){
       return [];
     }
     // The transcript is stored inline as JSONL. Never fetch URLs from this
     // column: it used to be user-controllable, which allowed SSRF.
-    const transcriptText = existingMeeting.transcriptUrl;
+    const transcriptText = existingMeeting.transcript;
     if (/^https?:\/\//i.test(transcriptText.trim())) {
       return [];
     }
-    let transcript: StreamTranscriptItem[];
+    let transcript: TranscriptItem[];
     try {
-      transcript = JSONL.parse<StreamTranscriptItem>(transcriptText);
+      transcript = JSONL.parse<TranscriptItem>(transcriptText);
     } catch {
       return [];
     }
@@ -344,7 +344,7 @@ export const meetingsRouter = createTRPCRouter({
         const [activated] = await db.batch([
           db
             .update(meetings)
-            .set({ status: "active", startedAt, transcriptUrl: null, updatedAt: startedAt })
+            .set({ status: "active", startedAt, transcript: null, updatedAt: startedAt })
             .where(and(
               eq(meetings.id, input.id),
               eq(meetings.userId, userId),
@@ -395,7 +395,7 @@ export const meetingsRouter = createTRPCRouter({
             status: "processing",
             endedAt: new Date(),
             updatedAt: new Date(),
-            ...(useMockTranscript ? { transcriptUrl: input.mockTranscript } : {}),
+            ...(useMockTranscript ? { transcript: input.mockTranscript } : {}),
           })
           .where(and(
             eq(meetings.id, input.id),

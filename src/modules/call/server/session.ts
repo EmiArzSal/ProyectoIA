@@ -7,7 +7,7 @@ import JSONL from "jsonl-parse-stringify";
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
 import { getPredefinedAgent, type PredefinedAgent } from "@/lib/predefined-agents";
-import type { StreamTranscriptItem } from "@/modules/meetings/types";
+import type { TranscriptItem } from "@/modules/meetings/types";
 import { MAX_SESSION_MS, TOTAL_QUESTIONS } from "../constants";
 import { loadPlan, type StoredQuestion } from "./plan";
 import { getSessionState, type SessionState } from "../session-rules";
@@ -39,15 +39,15 @@ export type ActiveSession = {
   meeting: Meeting;
   agent: PredefinedAgent;
   plan: StoredQuestion[];
-  items: StreamTranscriptItem[];
+  items: TranscriptItem[];
   state: SessionState;
 };
 
-export function parseTranscript(raw: string | null): StreamTranscriptItem[] {
+export function parseTranscript(raw: string | null): TranscriptItem[] {
   const text = raw?.trim();
   if (!text) return [];
   try {
-    return JSONL.parse<StreamTranscriptItem>(text);
+    return JSONL.parse<TranscriptItem>(text);
   } catch {
     throw new SessionError(500, "Transcripción corrupta");
   }
@@ -81,7 +81,7 @@ export async function loadActiveSession(
     throw new SessionError(409, "Esta entrevista se inició con una versión anterior. Finalízala para ver el reporte.");
   }
 
-  const items = parseTranscript(meeting.transcriptUrl);
+  const items = parseTranscript(meeting.transcript);
   return { meeting, agent, plan, items, state: getSessionState(items, agent.id) };
 }
 
@@ -100,12 +100,12 @@ export async function appendTurn(session: ActiveSession, speakerId: string, text
 
   const [updated] = await db
     .update(meetings)
-    .set({ transcriptUrl: next, updatedAt: new Date() })
+    .set({ transcript: next, updatedAt: new Date() })
     .where(and(
       eq(meetings.id, meeting.id),
       eq(meetings.userId, meeting.userId),
       eq(meetings.status, "active"),
-      sql`${meetings.transcriptUrl} IS NOT DISTINCT FROM ${meeting.transcriptUrl}::text`,
+      sql`${meetings.transcript} IS NOT DISTINCT FROM ${meeting.transcript}::text`,
     ))
     .returning({ id: meetings.id });
 
@@ -116,7 +116,7 @@ export async function appendTurn(session: ActiveSession, speakerId: string, text
   // The session as it is now, so a second turn can be appended in the same request.
   return {
     ...session,
-    meeting: { ...meeting, transcriptUrl: next },
+    meeting: { ...meeting, transcript: next },
     items: nextItems,
     state: getSessionState(nextItems, session.agent.id),
   };

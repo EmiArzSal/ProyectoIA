@@ -517,7 +517,7 @@ export type EvaluationJob =
 /** Step 1 — reads only. Decides whether the model needs to be called. */
 export async function prepareEvaluation(meetingId: string, userId: string): Promise<EvaluationJob> {
   const [meeting] = await db
-    .select({ agentId: meetings.agentId, transcript: meetings.transcriptUrl })
+    .select({ agentId: meetings.agentId, transcript: meetings.transcript })
     .from(meetings)
     .where(meetingScope(meetingId, userId));
   if (!meeting) return { kind: "gone" };
@@ -573,7 +573,7 @@ export async function runEvaluation(
 ): Promise<EvaluationResult | null> {
   // Never send transcript data to the provider for a deleted account.
   const [meeting] = await db
-    .select({ agentId: meetings.agentId, transcript: meetings.transcriptUrl })
+    .select({ agentId: meetings.agentId, transcript: meetings.transcript })
     .from(meetings)
     .where(meetingScope(meetingId, userId));
   if (!meeting) return null;

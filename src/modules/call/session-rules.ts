@@ -3,7 +3,7 @@
 // or server-only imports, so they are unit-tested in session-rules.test.ts.
 // server/session.ts and server/plan.ts re-export them.
 
-import type { StreamTranscriptItem } from "@/modules/meetings/types";
+import type { TranscriptItem } from "@/modules/meetings/types";
 import { NO_ANSWER, TOTAL_QUESTIONS } from "./constants";
 
 export type QuestionKind = "technical" | "soft";
@@ -17,7 +17,7 @@ export type SessionState = {
   canUserAnswer: boolean;
 };
 
-export function getSessionState(items: StreamTranscriptItem[], agentId: string): SessionState {
+export function getSessionState(items: TranscriptItem[], agentId: string): SessionState {
   const userItems = items.filter((i) => i.speaker_id !== agentId);
   const userTurns = userItems.length;
   const agentTurns = items.length - userTurns;
@@ -48,7 +48,7 @@ export function getSessionState(items: StreamTranscriptItem[], agentId: string):
   };
 }
 
-export function lastAgentMessage(items: StreamTranscriptItem[], agentId: string): string | undefined {
+export function lastAgentMessage(items: TranscriptItem[], agentId: string): string | undefined {
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i].speaker_id === agentId) return items[i].text;
   }
@@ -76,7 +76,7 @@ export function isUsableQuestion(text: string, avoid: string[] = [], kind: Quest
  * A review answer replaces the skipped one.
  */
 export function mapAnswersToPlan(
-  items: Pick<StreamTranscriptItem, "speaker_id" | "text">[],
+  items: Pick<TranscriptItem, "speaker_id" | "text">[],
   agentId: string,
   planSize: number,
 ): Map<number, string> {
