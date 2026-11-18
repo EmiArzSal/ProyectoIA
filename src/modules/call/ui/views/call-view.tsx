@@ -32,7 +32,7 @@ import {
 } from "@/modules/call/constants";
 import { MicCheck } from "@/modules/call/ui/components/mic-check";
 import { CONSENT_VERSION } from "@/lib/consent";
-import { CLOSING_AUDIO_URL, introAudioUrl, type Clip } from "@/modules/call/interviewer-script";
+import { CLOSING_AUDIO_URL, introAudioUrl, introText, type Clip } from "@/modules/call/interviewer-script";
 import {
   MIC_ERROR_MESSAGES,
   pickRecorderMimeType,
@@ -623,6 +623,8 @@ export const CallView = ({ meetingId }: Props) => {
           // Consent missing or outdated: back to the check, which asks for it.
           toast.error((err as Error).message);
           runStartedRef.current = false;
+          currentTextRef.current = "";
+          setCurrentText("");
           await queryClient.invalidateQueries(trpc.consent.getStatus.queryOptions());
           setPhase("precheck");
           return;
@@ -761,6 +763,11 @@ export const CallView = ({ meetingId }: Props) => {
     // rest of the interview in browsers with strict autoplay rules (Safari).
     const greeting = IS_MOCK ? null : playUrl(introAudioUrl(meeting.agent.id));
     if (IS_MOCK) unlockAudio();
+    else {
+      // Show what is being said; question 1 is added when the plan is ready.
+      currentTextRef.current = introText(meeting.agent);
+      setCurrentText(currentTextRef.current);
+    }
     setPhase("starting");
     void runSession(greeting);
   };
@@ -980,7 +987,16 @@ export const CallView = ({ meetingId }: Props) => {
           <>
             {/* Agent message card */}
             <div className="w-full rounded-2xl bg-slate-800/60 border border-slate-700/60 p-6 min-h-[120px] flex items-start">
-              {(phase === "starting" || phase === "ai-thinking") && (
+              {phase === "starting" && currentText && (
+                <div className="flex flex-col gap-3">
+                  <p className="text-base leading-relaxed text-slate-100">{currentText}</p>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <LoaderIcon className="animate-spin size-4 shrink-0" />
+                    <span className="text-xs">Preparando tus preguntas...</span>
+                  </div>
+                </div>
+              )}
+              {((phase === "starting" && !currentText) || phase === "ai-thinking") && (
                 <div className="flex items-center gap-3 text-slate-400">
                   <LoaderIcon className="animate-spin size-5 shrink-0" />
                   <span className="text-sm">
