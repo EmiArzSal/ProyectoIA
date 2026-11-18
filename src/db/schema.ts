@@ -115,7 +115,10 @@ export const userAchievements = pgTable("user_achievements", {
   achievementId: text('achievement_id').notNull(),
   seen: boolean('seen').notNull().default(false),
   earnedAt: timestamp('earned_at').notNull().defaultNow(),
-});
+}, (t) => [
+  // An achievement is earned once. Also serves lookups by user_id.
+  uniqueIndex("user_achievements_user_achievement_idx").on(t.userId, t.achievementId),
+]);
 
 export const dictionaryEntries = pgTable("dictionary_entries", {
   id: text('id').primaryKey().$defaultFn(() => nanoid()),

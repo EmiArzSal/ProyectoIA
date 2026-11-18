@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "drizzle-kit push",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "db:studio": "drizzle-kit studio",
     "dev:webhook": "ngrok http --url=sincere-shrew-heroic.ngrok-free.app 3000"
   },

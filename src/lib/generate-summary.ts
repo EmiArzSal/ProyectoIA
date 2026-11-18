@@ -5,6 +5,7 @@ import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { buildAchievementWrites } from "@/lib/award-achievements";
+import { localDate } from "@/lib/dates";
 import { AI_MODELS } from "@/lib/ai-models";
 import { getTopicTitle } from "@/lib/interview-topics";
 import { NO_ANSWER, TOTAL_QUESTIONS } from "@/modules/call/constants";
@@ -615,13 +616,16 @@ export async function applyRewards(
   result: EvaluationResult,
 ): Promise<"applied" | "already_applied" | "gone"> {
   const [meeting] = await db
-    .select({ rewardsAppliedAt: meetings.rewardsAppliedAt })
+    .select({ rewardsAppliedAt: meetings.rewardsAppliedAt, startedAt: meetings.startedAt, endedAt: meetings.endedAt })
     .from(meetings)
     .where(meetingScope(meetingId, userId));
   if (!meeting) return "gone";
   if (meeting.rewardsAppliedAt) return "already_applied";
 
-  const achievements = await buildAchievementWrites(userId, agentId, result.report);
+  // The streak counts the day the interview took place, not the day it was
+  // evaluated (a retried evaluation may run days later).
+  const practiceDate = localDate(meeting.startedAt ?? meeting.endedAt ?? new Date());
+  const achievements = await buildAchievementWrites(userId, agentId, result.report, practiceDate);
   const planWrites = result.planScores
     ? buildPlanResultWrites(userId, await loadPlan(meetingId), new Map(result.planScores))
     : [];
