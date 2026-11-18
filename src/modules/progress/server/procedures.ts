@@ -1,12 +1,16 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { meetingQuestions, meetings, userTopicProgress } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
-import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
+import { PREDEFINED_AGENTS, getPredefinedAgent } from "@/lib/predefined-agents";
+import { isCefrLevel } from "@/lib/report-columns";
+import { summarizeEvolution, type EvolutionPoint } from "@/modules/progress/evolution";
 import { SOFT_TOPICS, getTechTopicsForAgent } from "@/lib/interview-topics";
 
 const HISTORY_LENGTH = 5;
+/** Interviews shown in "Tu evolución" (the most recent ones). */
+const EVOLUTION_LENGTH = 20;
 
 export type TopicStatus = "new" | "weak" | "progress" | "mastered";
 
@@ -35,6 +39,48 @@ function statusOf(row: { level: number; lastScore: number | null } | undefined, 
 }
 
 export const progressRouter = createTRPCRouter({
+  /** English level and scores of the latest evaluated interviews, oldest first. */
+  getEvolution: protectedProcedure.query(async ({ ctx }) => {
+    const takenAt = sql<Date>`coalesce(${meetings.startedAt}, ${meetings.createdAt})`;
+    const rows = await db
+      .select({
+        id: meetings.id,
+        agentId: meetings.agentId,
+        takenAt,
+        englishLevel: meetings.englishLevel,
+        grammar: meetings.grammarScore,
+        vocabulary: meetings.vocabularyScore,
+        fluency: meetings.fluencyScore,
+        technical: meetings.technicalScore,
+        softSkills: meetings.softSkillsScore,
+      })
+      .from(meetings)
+      .where(and(
+        eq(meetings.userId, ctx.auth.user.id),
+        eq(meetings.status, "completed"),
+        // Interviews without answers have nothing to plot.
+        or(isNotNull(meetings.englishLevel), isNotNull(meetings.technicalScore), isNotNull(meetings.softSkillsScore)),
+      ))
+      .orderBy(desc(takenAt))
+      .limit(EVOLUTION_LENGTH);
+
+    const points: EvolutionPoint[] = rows.reverse().map((r) => ({
+      meetingId: r.id,
+      date: new Date(r.takenAt).toISOString(),
+      role: getPredefinedAgent(r.agentId)?.role ?? "Entrevista",
+      englishLevel: isCefrLevel(r.englishLevel) ? r.englishLevel : null,
+      scores: {
+        grammar: r.grammar,
+        vocabulary: r.vocabulary,
+        fluency: r.fluency,
+        technical: r.technical,
+        softSkills: r.softSkills,
+      },
+    }));
+
+    return { points, summary: summarizeEvolution(points) };
+  }),
+
   getOverview: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.auth.user.id;
 

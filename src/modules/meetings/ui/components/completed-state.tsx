@@ -26,15 +26,6 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseReport(summary: string | null | undefined): InterviewReport | null {
-  if (!summary) return null;
-  try {
-    return JSON.parse(summary) as InterviewReport;
-  } catch {
-    return null;
-  }
-}
-
 const CEFR_ORDER = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
 function cefrColor(level: string) {
@@ -320,7 +311,7 @@ function QuestionItem({ q, index }: { q: InterviewReport["questions"][number]; i
 interface Props { data: MeetingGetOne }
 
 export const CompletedState = ({ data }: Props) => {
-  const report = parseReport(data.summary);
+  const report = data.report;
 
   return (
     <Tabs defaultValue="feedback">
