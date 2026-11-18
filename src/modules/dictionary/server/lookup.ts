@@ -120,6 +120,17 @@ export async function lookupDictionary(
       return { status: 200, body: { found: false, results: [] } };
     }
     if (!response.ok) {
+      // Enough to tell a provider outage from a firewall block (e.g. Cloudflare
+      // rejecting datacenter IPs) in the deployment logs. No user data.
+      const snippet = (await response.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 300);
+      console.error("[dictionary] provider error", {
+        status: response.status,
+        server: response.headers.get("server"),
+        cfRay: response.headers.get("cf-ray"),
+        cfMitigated: response.headers.get("cf-mitigated"),
+        contentType: response.headers.get("content-type"),
+        body: snippet,
+      });
       return {
         status: response.status === 429 ? 503 : 502,
         body: errorBody("DICTIONARY_UNAVAILABLE", "No se pudo consultar el diccionario. Intenta de nuevo."),
@@ -167,7 +178,11 @@ export async function lookupDictionary(
         audioUrl,
       },
     };
-  } catch {
+  } catch (err) {
+    console.error("[dictionary] provider request failed", {
+      name: err instanceof Error ? err.name : typeof err,
+      message: err instanceof Error ? err.message : String(err),
+    });
     return {
       status: 503,
       body: errorBody("DICTIONARY_UNAVAILABLE", "No se pudo conectar con el diccionario. Intenta de nuevo."),
