@@ -14,6 +14,7 @@ import {
   SkipForwardIcon,
   CheckIcon,
   TriangleAlertIcon,
+  ArrowLeftIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -29,6 +30,12 @@ import {
   TECH_TIMER_S,
   TOTAL_QUESTIONS,
 } from "@/modules/call/constants";
+import { MicCheck } from "@/modules/call/ui/components/mic-check";
+import {
+  MIC_ERROR_MESSAGES,
+  pickRecorderMimeType,
+  useMicrophone,
+} from "@/modules/call/ui/hooks/use-microphone";
 
 // ── Mock mode (set NEXT_PUBLIC_SESSION_MOCK=true in .env.local) ────────────────
 // Zero API calls — use fake responses and short timers for UI development testing.
@@ -66,6 +73,7 @@ const MOCK_USER_ANSWERS = [
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type Phase =
+  | "precheck"     // microphone/speaker test; the interview has not started
   | "starting"
   | "ai-thinking"
   | "playing"
@@ -105,6 +113,9 @@ const formatClock = (totalSeconds: number) => {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 
+// Local file: testing the speakers costs no API call.
+const TEST_SOUND_URL = "/sounds/mic-check.mp3";
+
 const readApiError = async (res: Response, fallback: string) => {
   try {
     const data = await res.json();
@@ -134,7 +145,10 @@ export const CallView = ({ meetingId }: Props) => {
 
   // ── State ────────────────────────────────────────────────────────────────────
 
-  const [phase, setPhaseState]         = useState<Phase>("starting");
+  // An interview that has not started opens on the equipment check; the
+  // interview (and the daily quota) starts only from its button.
+  const initialPhase: Phase = initialStatusRef.current === "upcoming" ? "precheck" : "starting";
+  const [phase, setPhaseState]         = useState<Phase>(initialPhase);
   const [currentText, setCurrentText]  = useState("");
   const currentTextRef                 = useRef("");
   const [secondsLeft, setSecondsLeft]  = useState(0);
@@ -144,9 +158,17 @@ export const CallView = ({ meetingId }: Props) => {
 
   // ── Refs ─────────────────────────────────────────────────────────────────────
 
-  const phaseRef        = useRef<Phase>("starting");
+  const phaseRef        = useRef<Phase>(initialPhase);
   const sessionStartRef = useRef(0);
   const transcriptRef   = useRef<TranscriptItem[]>([]); // mock mode only
+
+  const mic = useMicrophone({ monitorLevel: phase === "precheck" });
+
+  // One audio element for the whole interview. It is first played inside a
+  // click (speaker test or "Iniciar entrevista"), which unlocks it for the
+  // interviewer's voice in browsers with strict autoplay rules (Safari).
+  const audioElRef        = useRef<HTMLAudioElement | null>(null);
+  const audioWarnedRef    = useRef(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef   = useRef<Blob[]>([]);
@@ -170,7 +192,7 @@ export const CallView = ({ meetingId }: Props) => {
   const timeUpRef       = useRef(false);
 
   // Lifecycle guards. The session loop must run exactly once per page load
-  // (startMeeting is not repeatable), and survive React StrictMode's
+  // (startMeeting is not repeatable); mountedRef survives React StrictMode's
   // simulated unmount/remount in development.
   const mountedRef    = useRef(false);
   const runStartedRef = useRef(false);
@@ -200,6 +222,30 @@ export const CallView = ({ meetingId }: Props) => {
     transcriptRef.current.push({ speaker_id: speakerId, type: "text", text, start_ts: now, stop_ts: now + 500 });
   };
 
+  const getAudioEl = () => (audioElRef.current ??= new Audio());
+
+  /** Plays `url` to the end. Resolves "blocked" if the browser refused to play. */
+  const playUrl = (url: string) =>
+    new Promise<"ended" | "error" | "blocked">((resolve) => {
+      const audio = getAudioEl();
+      audio.muted = false;
+      audio.onended = () => resolve("ended");
+      audio.onerror = () => resolve("error");
+      audio.src = url;
+      audio.play().catch((err: unknown) =>
+        resolve(err instanceof DOMException && err.name === "NotAllowedError" ? "blocked" : "error"));
+    });
+
+  const playTestSound = async () => (await playUrl(TEST_SOUND_URL)) === "ended";
+
+  // Called inside the "Iniciar entrevista" click: a muted play unlocks the element.
+  const unlockAudio = () => {
+    const audio = getAudioEl();
+    audio.muted = true;
+    audio.src = TEST_SOUND_URL;
+    audio.play().then(() => audio.pause(), () => {}).finally(() => { audio.muted = false; });
+  };
+
   const playTTS = async (): Promise<void> => {
     if (IS_MOCK) {
       await new Promise<void>((r) => setTimeout(r, 300));
@@ -212,14 +258,13 @@ export const CallView = ({ meetingId }: Props) => {
         body: JSON.stringify({ meetingId }),
       });
       if (!res.ok) return;
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      await new Promise<void>((resolve) => {
-        const audio = new Audio(url);
-        audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-        audio.play().catch(() => resolve());
-      });
+      const url = URL.createObjectURL(await res.blob());
+      const outcome = await playUrl(url);
+      URL.revokeObjectURL(url);
+      if (outcome === "blocked" && !audioWarnedRef.current) {
+        audioWarnedRef.current = true;
+        toast.warning("Tu navegador bloqueó el audio del entrevistador. Puedes leer las preguntas en pantalla.");
+      }
     } catch { /* silent — text always visible */ }
   };
 
@@ -349,40 +394,63 @@ export const CallView = ({ meetingId }: Props) => {
       return;
     }
 
-    try {
-      const stream   = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        stream.getTracks().forEach((t) => t.stop());
-        clearTimer();
-
-        // Skip path: don't send audio, just resolve as skipped
-        if (skipRecordingRef.current) {
-          skipRecordingRef.current = false;
-          resolveUserTurn({ audio: null, skipped: true });
-          return;
-        }
-
-        if (isStoppingRef.current || phaseRef.current === "done") return;
-
-        // Use the recorder's real MIME type (Safari records audio/mp4, not webm).
-        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-        resolveUserTurn({ audio: blob, skipped: false });
-      };
-
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setPhase("recording");
-      startCountdown(); // ← timer starts here, when mic opens
-    } catch {
-      toast.error("No se pudo acceder al micrófono. Verifica los permisos.");
+    const stream = await mic.getStream();
+    if (!stream) {
+      toast.error("No se pudo acceder al micrófono. Usa \"Reconectar micrófono\" e inténtalo de nuevo.");
+      return;
     }
+    // The turn may have ended (skip, time up) while the microphone reopened.
+    if (phaseRef.current !== "user-turn") return;
+
+    let recorder: MediaRecorder;
+    try {
+      recorder = createRecorder(stream);
+    } catch {
+      // Some browsers (Safari) refuse a new recorder on a reused stream: reopen once.
+      const fresh = await mic.acquire();
+      try {
+        if (!fresh || phaseRef.current !== "user-turn") throw new Error("no stream");
+        recorder = createRecorder(fresh);
+      } catch {
+        toast.error("No se pudo grabar con tu micrófono. Usa \"Reconectar micrófono\" e inténtalo de nuevo.");
+        return;
+      }
+    }
+
+    mediaRecorderRef.current = recorder;
+    setPhase("recording");
+    startCountdown(); // ← timer starts here, when recording starts
+  };
+
+  // A new recorder per answer over the interview's single microphone stream.
+  const createRecorder = (stream: MediaStream) => {
+    audioChunksRef.current = [];
+    const mimeType = pickRecorderMimeType();
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      clearTimer();
+
+      // Skip path: don't send audio, just resolve as skipped
+      if (skipRecordingRef.current) {
+        skipRecordingRef.current = false;
+        resolveUserTurn({ audio: null, skipped: true });
+        return;
+      }
+
+      if (isStoppingRef.current || phaseRef.current === "done") return;
+
+      // Use the recorder's real MIME type (Safari records audio/mp4, not webm).
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      resolveUserTurn({ audio: blob, skipped: false });
+    };
+
+    recorder.start();
+    return recorder;
   };
 
   const handleStopRecording = () => {
@@ -423,6 +491,7 @@ export const CallView = ({ meetingId }: Props) => {
       mediaRecorderRef.current.stop();
       await new Promise<void>((r) => setTimeout(r, 300));
     }
+    mic.release();
 
     const mockTranscript = IS_MOCK
       ? transcriptRef.current.map((item) => JSON.stringify(item)).join("\n")
@@ -573,20 +642,22 @@ export const CallView = ({ meetingId }: Props) => {
     }
   };
 
+  // "Iniciar entrevista" in the equipment check. Runs the session exactly once.
+  const handleStart = () => {
+    if (runStartedRef.current) return;
+    runStartedRef.current = true;
+    unlockAudio();
+    setPhase("starting");
+    void runSession();
+  };
+
   useEffect(() => {
     mountedRef.current = true;
 
-    const status = initialStatusRef.current;
-    if (!runStartedRef.current) {
-      runStartedRef.current = true;
-      if (status === "upcoming") {
-        runSession();
-      } else if (status === "active") {
-        // A reload or a second tab: the server-side session cannot be resumed
-        // from scratch, so offer to finish with what was recorded.
-        setPhase("interrupted");
-      }
-    }
+    // A reload or a second tab: the server-side session cannot be resumed
+    // from scratch, so offer to finish with what was recorded. An upcoming
+    // interview waits on the equipment check (handleStart).
+    if (initialStatusRef.current === "active") setPhase("interrupted");
 
     return () => {
       mountedRef.current = false;
@@ -595,7 +666,6 @@ export const CallView = ({ meetingId }: Props) => {
       // simulated remount happens before the clock is started.
       clearSessionClock();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -625,7 +695,8 @@ export const CallView = ({ meetingId }: Props) => {
   const isTimerWarning   = secondsLeft > 0 && secondsLeft <= 15;
   const progressPercent  = (questionIndex / TOTAL_QUESTIONS) * 100;
   const isUserTurnActive = phase === "user-turn" || phase === "recording";
-  const showSessionUI    = phase !== "review" && phase !== "interrupted";
+  const showSessionUI    = phase !== "review" && phase !== "interrupted" && phase !== "precheck";
+  const micProblem       = !IS_MOCK && showSessionUI && (mic.status === "lost" || mic.status === "error");
 
 
   return (
@@ -664,15 +735,26 @@ export const CallView = ({ meetingId }: Props) => {
               {Math.min(questionIndex + 1, TOTAL_QUESTIONS)} / {TOTAL_QUESTIONS}
             </Badge>
           )}
-          <Button
-            variant="ghost" size="sm"
-            className="text-red-400 hover:text-red-300 hover:bg-red-900/20 gap-1"
-            onClick={finishSession}
-            disabled={phase === "finishing" || phase === "starting" || phase === "done"}
-          >
-            <PhoneOffIcon className="size-4" />
-            Finalizar
-          </Button>
+          {phase === "precheck" ? (
+            <Button
+              variant="ghost" size="sm"
+              className="text-slate-400 hover:text-slate-200 hover:bg-slate-700/40 gap-1"
+              onClick={() => { mic.release(); router.push(`/meetings/${meetingId}`); }}
+            >
+              <ArrowLeftIcon className="size-4" />
+              Salir
+            </Button>
+          ) : (
+            <Button
+              variant="ghost" size="sm"
+              className="text-red-400 hover:text-red-300 hover:bg-red-900/20 gap-1"
+              onClick={finishSession}
+              disabled={phase === "finishing" || phase === "starting" || phase === "done"}
+            >
+              <PhoneOffIcon className="size-4" />
+              Finalizar
+            </Button>
+          )}
         </div>
       </div>
 
@@ -685,6 +767,31 @@ export const CallView = ({ meetingId }: Props) => {
 
       {/* ── Main content ── */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8 max-w-2xl mx-auto w-full">
+
+        {/* ── PRECHECK phase ── */}
+        {phase === "precheck" && (
+          <MicCheck mic={mic} onPlayTestSound={playTestSound} onStart={handleStart} skipMic={IS_MOCK} />
+        )}
+
+        {/* ── Microphone lost mid-interview ── */}
+        {micProblem && (
+          <div role="alert" className="w-full flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-sm">
+            <TriangleAlertIcon className="size-4 shrink-0 text-amber-400" />
+            <div className="flex-1">
+              <p className="font-medium text-amber-200">
+                {mic.status === "lost" || !mic.error ? "Se desconectó tu micrófono" : MIC_ERROR_MESSAGES[mic.error].title}
+              </p>
+              <p className="text-amber-100/70 text-xs mt-0.5">
+                {mic.status === "lost" || !mic.error
+                  ? "Vuelve a conectarlo y pulsa reconectar. El tiempo de la entrevista sigue corriendo."
+                  : MIC_ERROR_MESSAGES[mic.error].hint}
+              </p>
+            </div>
+            <Button size="sm" onClick={() => void mic.acquire()} className="bg-amber-500 hover:bg-amber-400 text-slate-900 shrink-0">
+              Reconectar micrófono
+            </Button>
+          </div>
+        )}
 
         {/* ── INTERRUPTED phase ── */}
         {phase === "interrupted" && (

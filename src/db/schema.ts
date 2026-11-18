@@ -178,3 +178,18 @@ export const userTopicProgress = pgTable("user_topic_progress", {
 }, (t) => [
   uniqueIndex("user_topic_progress_user_topic_idx").on(t.userId, t.topicId),
 ]);
+
+// One row per interview STARTED: what the daily quotas count. Kept when the
+// meeting is deleted (meeting_id becomes NULL), so deleting history never gives
+// back a quota slot; the API cost was already spent. Holds no interview content.
+export const interviewUsage = pgTable("interview_usage", {
+  id: text('id').primaryKey().$defaultFn(() => nanoid()),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  meetingId: text("meeting_id").references(() => meetings.id, { onDelete: 'set null' }),
+  startedAt: timestamp('started_at').notNull(),
+}, (t) => [
+  index("interview_usage_user_started_idx").on(t.userId, t.startedAt),
+  index("interview_usage_started_idx").on(t.startedAt),
+  // At most one row per meeting (several NULLs are allowed after deletions).
+  uniqueIndex("interview_usage_meeting_idx").on(t.meetingId),
+]);

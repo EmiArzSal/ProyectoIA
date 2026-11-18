@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, count, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
-import { meetings } from "@/db/schema";
+import { interviewUsage } from "@/db/schema";
 import { startOfToday } from "@/lib/dates";
 
 // Daily interview quotas. Both can be overridden with env vars without a deploy
@@ -28,19 +28,22 @@ export type DailyUsage = {
 // "Today" is the calendar day in APP_TIME_ZONE (see lib/dates), the same day
 // boundary the practice streak uses, so quotas reset at local midnight.
 
-/** Interviews count against the quota when they start (startedAt), finished or not. */
+/**
+ * Interviews count against the quota when they start, finished or not, and
+ * keep counting if the meeting is later deleted (see interview_usage).
+ */
 export async function getDailyUsage(userId: string): Promise<DailyUsage> {
   const since = startOfToday();
 
   const [[mine], [everyone]] = await Promise.all([
     db
       .select({ count: count() })
-      .from(meetings)
-      .where(and(eq(meetings.userId, userId), gte(meetings.startedAt, since))),
+      .from(interviewUsage)
+      .where(and(eq(interviewUsage.userId, userId), gte(interviewUsage.startedAt, since))),
     db
       .select({ count: count() })
-      .from(meetings)
-      .where(gte(meetings.startedAt, since)),
+      .from(interviewUsage)
+      .where(gte(interviewUsage.startedAt, since)),
   ]);
 
   return {
