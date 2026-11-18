@@ -80,11 +80,13 @@ function ScoreCard({
   score,
   cefrLevel,
   notes,
+  evidence,
 }: {
   label: string;
   score: number;
   cefrLevel?: string;
   notes: string;
+  evidence?: string[];
 }) {
   return (
     <div className="rounded-xl border bg-white p-4 flex flex-col gap-3">
@@ -103,6 +105,49 @@ function ScoreCard({
         </span>
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">{notes}</p>
+      {evidence && evidence.length > 0 && (
+        <div className="flex flex-col gap-1 border-t pt-2">
+          {evidence.map((quote, i) => (
+            <p key={i} className="text-[11px] italic text-gray-500 leading-snug">“{quote}”</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── STAR (soft-skill questions) ───────────────────────────────────────────────
+
+const STAR_ITEMS = [
+  { key: "situation", letter: "S", label: "Situación" },
+  { key: "task",      letter: "T", label: "Tarea" },
+  { key: "action",    letter: "A", label: "Acción" },
+  { key: "result",    letter: "R", label: "Resultado" },
+] as const;
+
+function StarChips({ star }: { star: NonNullable<InterviewReport["questions"][number]["star"]> }) {
+  const missing = STAR_ITEMS.filter((s) => !star[s.key]).map((s) => s.label.toLowerCase());
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex gap-1.5">
+        {STAR_ITEMS.map((s) => (
+          <span
+            key={s.key}
+            title={`${s.label}: ${star[s.key] ? "presente" : "faltó"}`}
+            className={cn(
+              "text-[11px] font-semibold px-2 py-0.5 rounded-full border",
+              star[s.key]
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-gray-50 text-gray-400 border-gray-200 line-through",
+            )}
+          >
+            {s.letter} · {s.label}
+          </span>
+        ))}
+      </div>
+      {missing.length > 0 && (
+        <p className="text-xs text-muted-foreground">Te faltó: {missing.join(", ")}.</p>
+      )}
     </div>
   );
 }
@@ -179,6 +224,11 @@ function QuestionItem({ q, index }: { q: InterviewReport["questions"][number]; i
             {index + 1}
           </span>
           <span className="text-sm font-medium text-gray-800 truncate">{q.question}</span>
+          {q.kind === "soft" && (
+            <Badge variant="outline" className="shrink-0 text-[10px] bg-violet-50 text-violet-700 border-violet-200">
+              Soft skill
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <ScoreDots score={q.technicalScore} />
@@ -217,6 +267,14 @@ function QuestionItem({ q, index }: { q: InterviewReport["questions"][number]; i
               </div>
             )}
           </div>
+
+          {/* STAR (soft skills) */}
+          {q.star && q.userAnswer !== "(sin respuesta)" && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Estructura STAR</p>
+              <StarChips star={q.star} />
+            </div>
+          )}
 
           {/* Feedback */}
           <div>
@@ -323,6 +381,11 @@ export const CompletedState = ({ data }: Props) => {
                     >
                       {report.englishLevel}
                     </Badge>
+                    {report.englishLevel === "N/A" && (
+                      <span className="text-[10px] text-muted-foreground text-center max-w-[120px]">
+                        Responde al menos 4 preguntas para estimarlo
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -330,30 +393,43 @@ export const CompletedState = ({ data }: Props) => {
             </div>
 
             {/* ── Score grid ── */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={cn(
+              "grid grid-cols-1 sm:grid-cols-2 gap-3",
+              report.scores.softSkills ? "lg:grid-cols-5" : "md:grid-cols-4",
+            )}>
               <ScoreCard
                 label="Gramática"
                 score={report.scores.grammar.score}
                 cefrLevel={report.scores.grammar.cefrLevel}
                 notes={report.scores.grammar.notes}
+                evidence={report.scores.grammar.evidence}
               />
               <ScoreCard
                 label="Vocabulario"
                 score={report.scores.vocabulary.score}
                 cefrLevel={report.scores.vocabulary.cefrLevel}
                 notes={report.scores.vocabulary.notes}
+                evidence={report.scores.vocabulary.evidence}
               />
               <ScoreCard
                 label="Fluidez"
                 score={report.scores.fluency.score}
                 cefrLevel={report.scores.fluency.cefrLevel}
                 notes={report.scores.fluency.notes}
+                evidence={report.scores.fluency.evidence}
               />
               <ScoreCard
                 label="Conocimiento técnico"
                 score={report.scores.technicalKnowledge.score}
                 notes={report.scores.technicalKnowledge.notes}
               />
+              {report.scores.softSkills && (
+                <ScoreCard
+                  label="Habilidades blandas"
+                  score={report.scores.softSkills.score}
+                  notes={report.scores.softSkills.notes}
+                />
+              )}
             </div>
 
             {/* ── Question breakdown ── */}
