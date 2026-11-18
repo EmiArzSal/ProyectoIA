@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { meetingQuestions, meetings, user } from "@/db/schema";
+import { interviewUsage, meetingQuestions, meetings, user } from "@/db/schema";
+import { nanoid } from "nanoid";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, MIN_PAGE_SIZE } from "@/constants";
 
@@ -326,15 +327,41 @@ export const meetingsRouter = createTRPCRouter({
           throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "No se pudo preparar la entrevista. Intenta de nuevo." });
         }
 
-        const [updated] = await db
-          .update(meetings)
-          .set({ status: "active", startedAt: new Date(), transcriptUrl: null, updatedAt: new Date() })
-          .where(and(
-            eq(meetings.id, input.id),
-            eq(meetings.userId, userId),
-            eq(meetings.status, "upcoming"),
-          ))
-          .returning();
+        // Activation and the quota record in ONE transaction. The usage row is
+        // copied from the meeting only if THIS update activated it, so a lost
+        // race (another tab) records nothing twice.
+        const startedAt = new Date();
+        const [activated] = await db.batch([
+          db
+            .update(meetings)
+            .set({ status: "active", startedAt, transcriptUrl: null, updatedAt: startedAt })
+            .where(and(
+              eq(meetings.id, input.id),
+              eq(meetings.userId, userId),
+              eq(meetings.status, "upcoming"),
+            ))
+            .returning(),
+          db
+            .insert(interviewUsage)
+            .select(
+              db
+                .select({
+                  id: sql<string>`${nanoid()}::text`.as("id"),
+                  userId: meetings.userId,
+                  meetingId: meetings.id,
+                  startedAt: meetings.startedAt,
+                })
+                .from(meetings)
+                .where(and(
+                  eq(meetings.id, input.id),
+                  eq(meetings.userId, userId),
+                  eq(meetings.status, "active"),
+                  eq(meetings.startedAt, startedAt),
+                )),
+            )
+            .onConflictDoNothing(),
+        ]);
+        const [updated] = activated;
         if (!updated) {
           throw new TRPCError({ code: "CONFLICT", message: "La entrevista ya fue iniciada" });
         }

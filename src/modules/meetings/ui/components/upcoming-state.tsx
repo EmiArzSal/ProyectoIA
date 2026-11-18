@@ -20,7 +20,7 @@ export const UpcomingState = ({ meetingId }: Props) => {
         <EmptyState
         image="/upcoming.svg"
         title="Entrevista lista para comenzar"
-        description={`${TOTAL_QUESTIONS} preguntas, máximo ${MAX_SESSION_MINUTES} minutos. Asegúrate de tener tu micrófono listo.`}
+        description={`${TOTAL_QUESTIONS} preguntas, máximo ${MAX_SESSION_MINUTES} minutos. Primero probarás tu micrófono; el tiempo empieza cuando inicies la entrevista.`}
         />
       <div className="flex flex-col gap-3 items-center w-full">
         <DailyUsageBadge />
