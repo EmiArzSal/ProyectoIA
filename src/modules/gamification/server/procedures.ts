@@ -3,6 +3,7 @@ import { userStats, userAchievements } from "@/db/schema";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
 import { and, eq } from "drizzle-orm";
 import { ACHIEVEMENTS } from "@/lib/achievements";
+import { effectiveStreak, EMPTY_STATS } from "@/lib/streak";
 
 export const gamificationRouter = createTRPCRouter({
   getStats: protectedProcedure.query(async ({ ctx }) => {
@@ -10,7 +11,10 @@ export const gamificationRouter = createTRPCRouter({
       .select()
       .from(userStats)
       .where(eq(userStats.userId, ctx.auth.user.id));
-    return stats ?? { currentStreak: 0, longestStreak: 0, totalSessions: 0, lastPracticeDate: null };
+    if (!stats) return EMPTY_STATS;
+    // The stored streak is only updated when an interview is evaluated; after a
+    // missed day it would keep showing the old value.
+    return { ...stats, currentStreak: effectiveStreak(stats) };
   }),
 
   getAchievements: protectedProcedure.query(async ({ ctx }) => {

@@ -25,6 +25,11 @@ export const meetingsProcessing = inngest.createFunction(
     id: "meetings/processing",
     retries: 3,
     triggers: [{ event: "meetings/processing" }],
+    // One evaluation at a time per user: the rewards step reads the user's
+    // stats and achievements and then writes them, so two interviews of the
+    // same user evaluated in parallel would lose a session or award twice.
+    // Different users still run in parallel.
+    concurrency: { key: "event.data.userId", limit: 1 },
     onFailure: async ({ event, error }) => {
       const { meetingId } = event.data.event.data as ProcessingEvent;
       console.error("[meetings/processing] failed after retries", meetingId, error.message);

@@ -3,6 +3,7 @@ import "server-only";
 import { and, count, eq, gte } from "drizzle-orm";
 import { db } from "@/db";
 import { meetings } from "@/db/schema";
+import { startOfToday } from "@/lib/dates";
 
 // Daily interview quotas. Both can be overridden with env vars without a deploy
 // of new code (e.g. raise them for a demo day).
@@ -14,35 +15,6 @@ const intEnv = (name: string, fallback: number) => {
 export const MAX_SESSIONS_PER_USER_PER_DAY = intEnv("MAX_SESSIONS_PER_USER_PER_DAY", 2);
 export const MAX_SESSIONS_GLOBAL_PER_DAY = intEnv("MAX_SESSIONS_GLOBAL_PER_DAY", 40);
 
-// "Today" is the calendar day in Mexico City, so quotas reset at local midnight.
-export const LIMITS_TIMEZONE = "America/Mexico_City";
-
-/** Instant of the most recent local midnight in `timeZone`. */
-export function startOfToday(timeZone = LIMITS_TIMEZONE, now = new Date()): Date {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(now)
-      .map((p) => [p.type, p.value]),
-  );
-
-  const y = Number(parts.year);
-  const m = Number(parts.month) - 1;
-  const d = Number(parts.day);
-  const localAsUTC = Date.UTC(y, m, d, Number(parts.hour), Number(parts.minute), Number(parts.second));
-  const offsetMs = localAsUTC - Math.floor(now.getTime() / 1000) * 1000;
-
-  return new Date(Date.UTC(y, m, d) - offsetMs);
-}
-
 export type DailyUsage = {
   used: number;
   limit: number;
@@ -52,6 +24,9 @@ export type DailyUsage = {
   /** ISO timestamp of the next reset (local midnight). */
   resetsAt: string;
 };
+
+// "Today" is the calendar day in APP_TIME_ZONE (see lib/dates), the same day
+// boundary the practice streak uses, so quotas reset at local midnight.
 
 /** Interviews count against the quota when they start (startedAt), finished or not. */
 export async function getDailyUsage(userId: string): Promise<DailyUsage> {
