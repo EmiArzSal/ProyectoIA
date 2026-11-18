@@ -12,7 +12,11 @@ export const user = pgTable("user", {
     emailVerified: boolean('email_verified').$defaultFn(() => false).notNull(),
     image: text('image'),
     createdAt: timestamp('created_at').$defaultFn(() => /* @__PURE__ */ new Date()).notNull(),
-    updatedAt: timestamp('updated_at').$defaultFn(() => /* @__PURE__ */ new Date()).notNull()
+    updatedAt: timestamp('updated_at').$defaultFn(() => /* @__PURE__ */ new Date()).notNull(),
+    // Recording/AI-processing consent (see src/lib/consent.ts). Null = never
+    // accepted; an older version than CONSENT_VERSION must accept again.
+    recordingConsentVersion: integer('recording_consent_version'),
+    recordingConsentAt: timestamp('recording_consent_at'),
 });
 
 export const session = pgTable("session", {

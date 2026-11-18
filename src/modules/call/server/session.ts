@@ -8,8 +8,10 @@ import { db } from "@/db";
 import { meetings } from "@/db/schema";
 import { getPredefinedAgent, type PredefinedAgent } from "@/lib/predefined-agents";
 import type { StreamTranscriptItem } from "@/modules/meetings/types";
-import { MAX_SESSION_MS, NO_ANSWER, TOTAL_QUESTIONS } from "../constants";
+import { MAX_SESSION_MS, TOTAL_QUESTIONS } from "../constants";
 import { loadPlan, type StoredQuestion } from "./plan";
+import { getSessionState, type SessionState } from "../session-rules";
+export { getSessionState, lastAgentMessage, type SessionState } from "../session-rules";
 
 // The server is the single source of truth for an interview in progress:
 // the transcript is built here turn by turn (stored as JSONL in
@@ -32,14 +34,6 @@ export function sessionErrorResponse(err: unknown) {
 
 type Meeting = typeof meetings.$inferSelect;
 
-export type SessionState = {
-  userTurns: number;
-  agentTurns: number;
-  /** The interviewer may produce its next message (intro, next question or closing). */
-  canAgentRespond: boolean;
-  /** The candidate may submit an answer (main round or review of skipped questions). */
-  canUserAnswer: boolean;
-};
 
 export type ActiveSession = {
   meeting: Meeting;
@@ -57,37 +51,6 @@ export function parseTranscript(raw: string | null): StreamTranscriptItem[] {
   } catch {
     throw new SessionError(500, "Transcripción corrupta");
   }
-}
-
-export function getSessionState(items: StreamTranscriptItem[], agentId: string): SessionState {
-  const userItems = items.filter((i) => i.speaker_id !== agentId);
-  const userTurns = userItems.length;
-  const agentTurns = items.length - userTurns;
-  const last = items.at(-1);
-
-  const skippedInMainRound = userItems
-    .slice(0, TOTAL_QUESTIONS)
-    .filter((i) => i.text === NO_ANSWER).length;
-
-  const canAgentRespond =
-    (agentTurns === 0 && userTurns === 0) ||
-    (last !== undefined &&
-      last.speaker_id !== agentId &&
-      userTurns <= TOTAL_QUESTIONS &&
-      agentTurns === userTurns);
-
-  const inMainRound = userTurns < TOTAL_QUESTIONS && agentTurns === userTurns + 1;
-  const inReviewRound =
-    agentTurns === TOTAL_QUESTIONS + 1 &&
-    userTurns >= TOTAL_QUESTIONS &&
-    userTurns < TOTAL_QUESTIONS + skippedInMainRound;
-
-  return {
-    userTurns,
-    agentTurns,
-    canAgentRespond,
-    canUserAnswer: inMainRound || inReviewRound,
-  };
 }
 
 export async function loadActiveSession(
@@ -150,11 +113,4 @@ export async function appendTurn(session: ActiveSession, speakerId: string, text
   if (!updated) {
     throw new SessionError(409, "La entrevista cambió de estado. Intenta de nuevo.");
   }
-}
-
-export function lastAgentMessage(items: StreamTranscriptItem[], agentId: string): string | undefined {
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (items[i].speaker_id === agentId) return items[i].text;
-  }
-  return undefined;
 }

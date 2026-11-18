@@ -6,6 +6,7 @@ import { CheckCircle2Icon, CircleIcon, LoaderIcon, MicIcon, PlayIcon, TriangleAl
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { MIC_ERROR_MESSAGES, type Microphone } from "@/modules/call/ui/hooks/use-microphone";
+import { ConsentCard } from "@/modules/call/ui/components/consent-card";
 
 // Level the meter must exceed, for this long, to count as "we heard you".
 const SPEECH_LEVEL = 0.15;
@@ -18,9 +19,15 @@ interface Props {
   onStart: () => void;
   /** Mock mode: no microphone needed. */
   skipMic?: boolean;
+  /** null while loading. The microphone is only requested after consent. */
+  consentAccepted: boolean | null;
+  onAcceptConsent: () => void;
+  acceptingConsent: boolean;
 }
 
-export const MicCheck = ({ mic, onPlayTestSound, onStart, skipMic = false }: Props) => {
+export const MicCheck = ({
+  mic, onPlayTestSound, onStart, skipMic = false, consentAccepted, onAcceptConsent, acceptingConsent,
+}: Props) => {
   const [heard, setHeard] = useState(false);
   const [sound, setSound] = useState<"idle" | "playing" | "played" | "blocked">("idle");
   // Heard = the level stays above the threshold for SPEECH_MS. A timer, not the
@@ -45,7 +52,7 @@ export const MicCheck = ({ mic, onPlayTestSound, onStart, skipMic = false }: Pro
     setSound((await onPlayTestSound()) ? "played" : "blocked");
   };
 
-  const ready = skipMic || (mic.status === "ready" && heard);
+  const ready = consentAccepted === true && (skipMic || (mic.status === "ready" && heard));
   const error = mic.error ? MIC_ERROR_MESSAGES[mic.error] : null;
 
   return (
@@ -57,6 +64,12 @@ export const MicCheck = ({ mic, onPlayTestSound, onStart, skipMic = false }: Pro
         </p>
       </div>
 
+      {consentAccepted === null && (
+        <div className="flex justify-center text-slate-400"><LoaderIcon className="size-5 animate-spin" /></div>
+      )}
+      {consentAccepted === false && <ConsentCard onAccept={onAcceptConsent} accepting={acceptingConsent} />}
+
+      {consentAccepted && <>
       {/* Step 1 — microphone */}
       <section className="rounded-2xl bg-slate-800/60 border border-slate-700/60 p-5 flex flex-col gap-4">
         <StepTitle done={ready && !skipMic} icon={<MicIcon className="size-4" />} title="Micrófono" />
@@ -151,11 +164,13 @@ export const MicCheck = ({ mic, onPlayTestSound, onStart, skipMic = false }: Pro
         </Button>
       </section>
 
+      </>}
+
       <div className="flex flex-col items-center gap-2">
         <Button onClick={onStart} disabled={!ready} size="lg" className="bg-blue-600 hover:bg-blue-500 px-8">
           Iniciar entrevista
         </Button>
-        {!ready && (
+        {!ready && consentAccepted && (
           <p className="text-xs text-slate-500">Se activa cuando confirmemos que te escuchamos.</p>
         )}
       </div>

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useTRPC } from "@/trpc/client";
-import { useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSuspenseQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { TRPCClientError } from "@trpc/client";
 import { GeneratedAvatar } from "@/components/ui/generated-avatar";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
   TOTAL_QUESTIONS,
 } from "@/modules/call/constants";
 import { MicCheck } from "@/modules/call/ui/components/mic-check";
+import { CONSENT_VERSION } from "@/lib/consent";
 import {
   MIC_ERROR_MESSAGES,
   pickRecorderMimeType,
@@ -163,6 +164,16 @@ export const CallView = ({ meetingId }: Props) => {
   const transcriptRef   = useRef<TranscriptItem[]>([]); // mock mode only
 
   const mic = useMicrophone({ monitorLevel: phase === "precheck" });
+
+  // Recording consent (enforced again by startMeeting on the server).
+  const consentQuery = useQuery({
+    ...trpc.consent.getStatus.queryOptions(),
+    enabled: initialStatusRef.current === "upcoming",
+  });
+  const acceptConsent = useMutation(trpc.consent.accept.mutationOptions({
+    onSuccess: () => queryClient.invalidateQueries(trpc.consent.getStatus.queryOptions()),
+    onError: (err) => toast.error(err.message),
+  }));
 
   // One audio element for the whole interview. It is first played inside a
   // click (speaker test or "Iniciar entrevista"), which unlocks it for the
@@ -528,6 +539,14 @@ export const CallView = ({ meetingId }: Props) => {
       } catch (err) {
         const code = trpcErrorCode(err);
         if (code === "CONFLICT") { setPhase("interrupted"); return; }
+        if (code === "PRECONDITION_FAILED") {
+          // Consent missing or outdated: back to the check, which asks for it.
+          toast.error((err as Error).message);
+          runStartedRef.current = false;
+          await queryClient.invalidateQueries(trpc.consent.getStatus.queryOptions());
+          setPhase("precheck");
+          return;
+        }
         if (code === "TOO_MANY_REQUESTS") {
           toast.error((err as Error).message);
           router.push(`/meetings/${meetingId}`);
@@ -770,7 +789,15 @@ export const CallView = ({ meetingId }: Props) => {
 
         {/* ── PRECHECK phase ── */}
         {phase === "precheck" && (
-          <MicCheck mic={mic} onPlayTestSound={playTestSound} onStart={handleStart} skipMic={IS_MOCK} />
+          <MicCheck
+            mic={mic}
+            onPlayTestSound={playTestSound}
+            onStart={handleStart}
+            skipMic={IS_MOCK}
+            consentAccepted={consentQuery.data ? consentQuery.data.accepted : null}
+            onAcceptConsent={() => acceptConsent.mutate({ version: CONSENT_VERSION })}
+            acceptingConsent={acceptConsent.isPending}
+          />
         )}
 
         {/* ── Microphone lost mid-interview ── */}

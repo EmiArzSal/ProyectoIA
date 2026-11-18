@@ -185,6 +185,13 @@ export const SignUpView = () => {
                 <Button disabled={isPending} className="auth-signup__submit w-full font-sans" type="submit" variant="default" size="lg">
                   {isPending ? "Creando cuenta..." : "Crear cuenta"}
                 </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Al crear tu cuenta aceptas el{" "}
+                  <Link href="/privacidad" target="_blank" className="underline">
+                    aviso de privacidad
+                  </Link>
+                  .
+                </p>
                 <div className="text-center text-sm">
                   ¿Ya tienes una cuenta?{" "}
                   <Link href="/sign-in" className="text-primary underline">
