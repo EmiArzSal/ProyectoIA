@@ -4,13 +4,15 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { AI_MODELS } from "@/lib/ai-models";
-import { NO_ANSWER, SOFT_TIMER_S } from "@/modules/call/constants";
+import { MAX_SESSION_MS, NO_ANSWER, SOFT_TIMER_S } from "@/modules/call/constants";
 import {
   SessionError,
   appendTurn,
   loadActiveSession,
   sessionErrorResponse,
+  type ActiveSession,
 } from "@/modules/call/server/session";
+import { composeAgentTurn, type AgentTurn } from "@/modules/call/server/turns";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -34,6 +36,10 @@ const ALLOWED_AUDIO: Record<string, string> = {
  * Records the candidate's answer to the current question. The answer is
  * transcribed and written to the transcript here, on the server; the client
  * never sends answer text. Omitting `audio` records the question as skipped.
+ *
+ * In the main round the interviewer's next message is composed in the same
+ * request (one round trip less per turn). If that part fails the answer is
+ * still recorded and `agent` is null; the client then asks /message.
  */
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -107,10 +113,25 @@ export async function POST(request: NextRequest) {
     }
 
     // Always record the turn so the interview can move on consistently.
-    await appendTurn(s, session.user.id, text || NO_ANSWER);
+    const updated = await appendTurn(s, session.user.id, text || NO_ANSWER);
+    const agent = await respondAsAgent(updated);
 
-    return NextResponse.json({ text, transcriptionFailed });
+    return NextResponse.json({ text, transcriptionFailed, agent });
   } catch (err) {
     return sessionErrorResponse(err);
+  }
+}
+
+async function respondAsAgent(s: ActiveSession): Promise<AgentTurn | null> {
+  // Review round (no interviewer messages) or time is up (the client finishes).
+  const startedAt = s.meeting.startedAt?.getTime() ?? 0;
+  if (!s.state.canAgentRespond || Date.now() > startedAt + MAX_SESSION_MS) return null;
+  try {
+    const turn = await composeAgentTurn(s);
+    await appendTurn(s, s.agent.id, turn.text);
+    return turn;
+  } catch (err) {
+    console.error("[transcribe] could not compose the interviewer's turn", err);
+    return null;
   }
 }

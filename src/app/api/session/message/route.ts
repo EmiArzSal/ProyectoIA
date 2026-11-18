@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
       throw new SessionError(409, "No es el turno del entrevistador");
     }
 
-    const text = await composeAgentTurn(s);
-    await appendTurn(s, s.agent.id, text);
-    return NextResponse.json({ text });
+    const turn = await composeAgentTurn(s);
+    await appendTurn(s, s.agent.id, turn.text);
+    return NextResponse.json(turn);
   } catch (err) {
     return sessionErrorResponse(err);
   }

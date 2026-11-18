@@ -2,13 +2,15 @@ import "server-only";
 
 import OpenAI from "openai";
 import { AI_MODELS, INTERVIEWER_MAX_TOKENS } from "@/lib/ai-models";
-import { NO_ANSWER, TECH_QUESTIONS, TOTAL_QUESTIONS } from "../constants";
+import { NO_ANSWER } from "../constants";
+import { composeMessage, messageClips, type Clip } from "../interviewer-script";
 import type { ActiveSession } from "./session";
 
-// The interviewer's message for each turn is composed by code:
-//   [acknowledgment of the last answer] + [transition] + [next plan question]
-// The LLM only writes the one-sentence acknowledgment, so it can never skip,
-// repeat, merge or invent questions, and the cost per turn stays tiny.
+// The interviewer's message for each turn is composed by code (see
+// interviewer-script.ts): [acknowledgment of the last answer] + [transition]
+// + [next plan question]. The LLM only writes the one-sentence
+// acknowledgment, so it can never skip, repeat, merge or invent questions,
+// and the cost per turn stays tiny.
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -63,27 +65,19 @@ async function acknowledge(session: ActiveSession, question: string, answer: str
   }
 }
 
+export type AgentTurn = { text: string; clips: Clip[] };
+
 /** Builds the interviewer's next message. Callers must check state.canAgentRespond first. */
-export async function composeAgentTurn(session: ActiveSession): Promise<string> {
+export async function composeAgentTurn(session: ActiveSession): Promise<AgentTurn> {
   const { agent, plan, items, state } = session;
   const answered = state.userTurns; // questions answered (or skipped) so far
+  const questions = plan.map((q) => q.question); // plan is ordered by position
 
-  if (answered === 0) {
-    return (
-      `Hi, I'm ${agent.interviewerName}, and I'll be your interviewer for this ${agent.role} position. ` +
-      `I'll ask you ${TECH_QUESTIONS} technical questions and then ${TOTAL_QUESTIONS - TECH_QUESTIONS} behavioral questions. ` +
-      `Let's begin. ${plan[0].question}`
-    );
+  let ack = "";
+  if (answered > 0) {
+    const lastAnswer = items.at(-1)?.text ?? NO_ANSWER;
+    ack = await acknowledge(session, plan[answered - 1].question, lastAnswer, answered);
   }
 
-  const lastAnswer = items.at(-1)?.text ?? NO_ANSWER;
-  const ack = await acknowledge(session, plan[answered - 1].question, lastAnswer, answered);
-
-  if (answered >= TOTAL_QUESTIONS) {
-    return `${ack} That was the last question. Thank you for your time today, and good luck!`;
-  }
-
-  const next = plan[answered]; // plan is ordered by position (1-based)
-  const transition = answered === TECH_QUESTIONS ? " Now I'd like to ask you some behavioral questions." : "";
-  return `${ack}${transition} ${next.question}`;
+  return { text: composeMessage(answered, agent, questions, ack), clips: messageClips(answered) };
 }

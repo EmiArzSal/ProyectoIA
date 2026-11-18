@@ -32,6 +32,7 @@ import {
 } from "@/modules/call/constants";
 import { MicCheck } from "@/modules/call/ui/components/mic-check";
 import { CONSENT_VERSION } from "@/lib/consent";
+import { CLOSING_AUDIO_URL, introAudioUrl, type Clip } from "@/modules/call/interviewer-script";
 import {
   MIC_ERROR_MESSAGES,
   pickRecorderMimeType,
@@ -102,6 +103,11 @@ type QuestionRecord = {
 // The answer is sent to the server as audio; the server transcribes it and
 // writes it to the transcript. mockText is only used in mock mode.
 type UserTurnResult = { audio: Blob | null; skipped: boolean; mockText?: string };
+
+// The interviewer's message and the audio clips it is spoken with, in order.
+type AgentTurn = { text: string; clips: Clip[] };
+
+type PlayOutcome = "ended" | "error" | "blocked" | "stopped";
 
 const trpcErrorCode = (err: unknown) =>
   err instanceof TRPCClientError ? (err.data as { code?: string } | undefined)?.code : undefined;
@@ -180,6 +186,9 @@ export const CallView = ({ meetingId }: Props) => {
   // interviewer's voice in browsers with strict autoplay rules (Safari).
   const audioElRef        = useRef<HTMLAudioElement | null>(null);
   const audioWarnedRef    = useRef(false);
+  // Audio of plan questions, fetched while the candidate answers the previous one.
+  const questionAudioRef  = useRef(new Map<number, Promise<string | null>>());
+  const objectUrlsRef     = useRef<string[]>([]);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef   = useRef<Blob[]>([]);
@@ -235,9 +244,14 @@ export const CallView = ({ meetingId }: Props) => {
 
   const getAudioEl = () => (audioElRef.current ??= new Audio());
 
+  // Resolves the playback in progress, so stopAudio can end it.
+  const playbackResolveRef = useRef<((outcome: PlayOutcome) => void) | null>(null);
+
   /** Plays `url` to the end. Resolves "blocked" if the browser refused to play. */
   const playUrl = (url: string) =>
-    new Promise<"ended" | "error" | "blocked">((resolve) => {
+    new Promise<PlayOutcome>((resolve) => {
+      playbackResolveRef.current?.("stopped"); // a new clip replaces the previous one
+      playbackResolveRef.current = resolve;
       const audio = getAudioEl();
       audio.muted = false;
       audio.onended = () => resolve("ended");
@@ -249,7 +263,26 @@ export const CallView = ({ meetingId }: Props) => {
 
   const playTestSound = async () => (await playUrl(TEST_SOUND_URL)) === "ended";
 
-  // Called inside the "Iniciar entrevista" click: a muted play unlocks the element.
+  /** Silences the interviewer; the playback in progress resolves "stopped". */
+  const stopAudio = () => {
+    const audio = audioElRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+    }
+    playbackResolveRef.current?.("stopped");
+    playbackResolveRef.current = null;
+  };
+
+  const warnAudioBlocked = () => {
+    if (audioWarnedRef.current) return;
+    audioWarnedRef.current = true;
+    toast.warning("Tu navegador bloqueó el audio del entrevistador. Puedes leer las preguntas en pantalla.");
+  };
+
+  // Mock mode, inside the "Iniciar entrevista" click: a muted play unlocks the
+  // element. Real interviews unlock it by playing the greeting in that click.
   const unlockAudio = () => {
     const audio = getAudioEl();
     audio.muted = true;
@@ -257,34 +290,76 @@ export const CallView = ({ meetingId }: Props) => {
     audio.play().then(() => audio.pause(), () => {}).finally(() => { audio.muted = false; });
   };
 
-  const playTTS = async (): Promise<void> => {
-    if (IS_MOCK) {
-      await new Promise<void>((r) => setTimeout(r, 300));
-      return;
-    }
+  /** Generates one clip on the server. Null on failure: the text stays on screen. */
+  const fetchSpeech = async (body: { part: Clip["kind"]; index?: number }): Promise<string | null> => {
     try {
       const res = await fetch("/api/session/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meetingId }),
+        body: JSON.stringify({ meetingId, ...body }),
       });
-      if (!res.ok) return;
+      if (!res.ok) return null;
       const url = URL.createObjectURL(await res.blob());
-      const outcome = await playUrl(url);
-      URL.revokeObjectURL(url);
-      if (outcome === "blocked" && !audioWarnedRef.current) {
-        audioWarnedRef.current = true;
-        toast.warning("Tu navegador bloqueó el audio del entrevistador. Puedes leer las preguntas en pantalla.");
+      objectUrlsRef.current.push(url);
+      return url;
+    } catch {
+      return null;
+    }
+  };
+
+  /** Starts fetching a question's audio so it is ready when it is asked. */
+  const prefetchQuestion = (index: number) => {
+    if (IS_MOCK || index < 0 || index >= TOTAL_QUESTIONS) return;
+    const cache = questionAudioRef.current;
+    if (!cache.has(index)) cache.set(index, fetchSpeech({ part: "question", index }));
+  };
+
+  const questionAudio = async (index: number) => {
+    const prefetched = await questionAudioRef.current.get(index);
+    return prefetched ?? fetchSpeech({ part: "question", index });
+  };
+
+  const clipSource = (clip: Clip): Promise<string | null> => {
+    switch (clip.kind) {
+      case "intro":    return Promise.resolve(introAudioUrl(meeting.agent.id));
+      case "closing":  return Promise.resolve(CLOSING_AUDIO_URL);
+      case "ack":      return fetchSpeech({ part: "ack" });
+      case "question": return questionAudio(clip.index);
+    }
+  };
+
+  // Speaks the interviewer's message clip by clip. Every clip starts loading
+  // at once (the question is usually prefetched already), so the next one is
+  // ready when the previous ends.
+  const playAgentTurn = async (turn: AgentTurn): Promise<void> => {
+    if (IS_MOCK) {
+      await new Promise<void>((r) => setTimeout(r, 300));
+      return;
+    }
+    const sources = turn.clips.map((clip) => ({ clip, url: clipSource(clip) }));
+    for (const { clip, url } of sources) {
+      if (shouldStop()) return;
+      const src = await url;
+      let outcome = src ? await playUrl(src) : "error";
+      // A pre-recorded file that is missing: generate it instead.
+      if (outcome === "error" && (clip.kind === "intro" || clip.kind === "closing")) {
+        const generated = await fetchSpeech({ part: clip.kind });
+        if (generated && !shouldStop()) outcome = await playUrl(generated);
       }
-    } catch { /* silent — text always visible */ }
+      if (outcome === "stopped") return;
+      if (outcome === "blocked") {
+        warnAudioBlocked();
+        return;
+      }
+    }
   };
 
   // The server decides the prompt and progress from its own transcript.
-  const getAgentResponse = async (): Promise<string> => {
+  const getAgentResponse = async (): Promise<AgentTurn> => {
     if (IS_MOCK) {
       await new Promise<void>((r) => setTimeout(r, 400));
       const idx = mockResponseIdxRef.current++;
-      return MOCK_AGENT_RESPONSES[Math.min(idx, MOCK_AGENT_RESPONSES.length - 1)];
+      return { text: MOCK_AGENT_RESPONSES[Math.min(idx, MOCK_AGENT_RESPONSES.length - 1)], clips: [] };
     }
 
     const res = await fetch("/api/session/message", {
@@ -294,13 +369,13 @@ export const CallView = ({ meetingId }: Props) => {
     });
     if (res.status === 410) throw new TimeUpError();
     if (!res.ok) throw new Error(await readApiError(res, "Error al obtener respuesta del agente"));
-    const data = await res.json();
-    return data.text as string;
+    return await res.json() as AgentTurn;
   };
 
-  // Sends the answer (or a skip) to the server, which transcribes and records it.
-  const submitAnswer = async (result: UserTurnResult): Promise<string> => {
-    if (IS_MOCK) return result.skipped ? "" : (result.mockText ?? "");
+  // Sends the answer (or a skip) to the server, which transcribes and records
+  // it and, in the main round, already returns the interviewer's next message.
+  const submitAnswer = async (result: UserTurnResult): Promise<{ text: string; agent: AgentTurn | null }> => {
+    if (IS_MOCK) return { text: result.skipped ? "" : (result.mockText ?? ""), agent: null };
 
     const formData = new FormData();
     formData.append("meetingId", meetingId);
@@ -312,11 +387,11 @@ export const CallView = ({ meetingId }: Props) => {
     if (res.status === 410) throw new TimeUpError();
     if (!res.ok) throw new Error(await readApiError(res, "No se pudo registrar tu respuesta"));
 
-    const data = await res.json() as { text?: string; transcriptionFailed?: boolean };
+    const data = await res.json() as { text?: string; transcriptionFailed?: boolean; agent?: AgentTurn | null };
     if (data.transcriptionFailed) {
       toast.error("No pudimos transcribir tu respuesta; se registró como sin respuesta.");
     }
-    return data.text ?? "";
+    return { text: data.text ?? "", agent: data.agent ?? null };
   };
 
   // ── Timer (starts when mic opens) ─────────────────────────────────────────────
@@ -490,6 +565,7 @@ export const CallView = ({ meetingId }: Props) => {
     setPhase("finishing");
     clearTimer();
     clearSessionClock();
+    stopAudio();
 
     // Resolve any pending promises so the async loop can exit
     resolveUserTurn({ audio: null, skipped: true });
@@ -531,12 +607,16 @@ export const CallView = ({ meetingId }: Props) => {
 
   const startMeeting = useMutation(trpc.meetings.startMeeting.mutationOptions());
 
-  const runSession = async () => {
+  // `greeting` is the pre-recorded greeting, already playing since the click
+  // (null in mock mode). It covers the time startMeeting takes to write the
+  // question plan.
+  const runSession = async (greeting: Promise<PlayOutcome> | null) => {
     try {
       // 1. Activate meeting (server allows this only once: upcoming → active)
       try {
         await startMeeting.mutateAsync({ id: meetingId });
       } catch (err) {
+        stopAudio();
         const code = trpcErrorCode(err);
         if (code === "CONFLICT") { setPhase("interrupted"); return; }
         if (code === "PRECONDITION_FAILED") {
@@ -558,18 +638,27 @@ export const CallView = ({ meetingId }: Props) => {
       if (shouldStop()) return;
       sessionStartRef.current = Date.now();
       if (!IS_MOCK) startSessionClock();
+      prefetchQuestion(0); // the plan exists now; ready by the end of the greeting
 
-      // 2. Initial greeting + first question
-      setPhase("ai-thinking");
-      const introText = await getAgentResponse();
+      // 2. Initial greeting + first question (the phase stays "starting":
+      // the intro text needs no model call and arrives right away)
+      const intro = await getAgentResponse();
       if (shouldStop()) return;
 
-      addMockTranscript(meeting.agent.id, introText);
-      currentTextRef.current = introText;
-      setCurrentText(introText);
+      addMockTranscript(meeting.agent.id, intro.text);
+      currentTextRef.current = intro.text;
+      setCurrentText(intro.text);
 
       setPhase("playing");
-      await playTTS();
+      let greeted = greeting ? await greeting : "ended";
+      if (greeted === "error" && !shouldStop()) {
+        // The pre-recorded file is missing: generate the greeting instead.
+        const generated = await fetchSpeech({ part: "intro" });
+        if (generated && !shouldStop()) greeted = await playUrl(generated);
+      }
+      if (shouldStop()) return;
+      if (greeted === "blocked") warnAudioBlocked();
+      else await playAgentTurn({ ...intro, clips: intro.clips.filter((c) => c.kind !== "intro") });
       if (shouldStop()) return;
 
       // 3. 10-question loop
@@ -582,31 +671,33 @@ export const CallView = ({ meetingId }: Props) => {
         setQuestionIndex(i);
         // Capture the current question text for the record
         const agentQuestion = currentTextRef.current;
+        prefetchQuestion(i + 1); // asked after this answer
         setPhase("user-turn");
 
         const result = await waitForUserTurn();
         if (shouldStop()) return;
 
         setPhase("transcribing");
-        const text = await submitAnswer(result);
+        const submitted = await submitAnswer(result);
         if (shouldStop()) return;
         if (timeUpRef.current) { await finishSession(); return; }
 
+        const { text } = submitted;
         const answered = !result.skipped && text.length > 0;
         records.push({ agentMessage: agentQuestion, userAnswer: answered ? text : null });
         addMockTranscript(sessionData?.user.id ?? "user", answered ? text : NO_ANSWER);
 
-        // Agent responds
+        // Agent responds (normally already composed by the answer request)
         setPhase("ai-thinking");
-        const agentText = await getAgentResponse();
+        const agentTurn = submitted.agent ?? await getAgentResponse();
         if (shouldStop()) return;
 
-        addMockTranscript(meeting.agent.id, agentText);
-        currentTextRef.current = agentText;
-        setCurrentText(agentText);
+        addMockTranscript(meeting.agent.id, agentTurn.text);
+        currentTextRef.current = agentTurn.text;
+        setCurrentText(agentTurn.text);
 
         setPhase("playing");
-        await playTTS();
+        await playAgentTurn(agentTurn);
         if (shouldStop()) return;
       }
 
@@ -632,7 +723,7 @@ export const CallView = ({ meetingId }: Props) => {
             if (shouldStop()) return;
 
             setPhase("transcribing");
-            const text = await submitAnswer(result);
+            const { text } = await submitAnswer(result);
             if (shouldStop()) return;
             if (timeUpRef.current) { await finishSession(); return; }
 
@@ -647,6 +738,7 @@ export const CallView = ({ meetingId }: Props) => {
         await finishSession();
       }
     } catch (err) {
+      stopAudio();
       if (err instanceof TimeUpError && !shouldStop()) {
         timeUpRef.current = true;
         toast.info("Se acabó el tiempo de la entrevista. Finalizando...");
@@ -665,9 +757,12 @@ export const CallView = ({ meetingId }: Props) => {
   const handleStart = () => {
     if (runStartedRef.current) return;
     runStartedRef.current = true;
-    unlockAudio();
+    // Started inside the click, which also unlocks the audio element for the
+    // rest of the interview in browsers with strict autoplay rules (Safari).
+    const greeting = IS_MOCK ? null : playUrl(introAudioUrl(meeting.agent.id));
+    if (IS_MOCK) unlockAudio();
     setPhase("starting");
-    void runSession();
+    void runSession(greeting);
   };
 
   useEffect(() => {
@@ -681,6 +776,9 @@ export const CallView = ({ meetingId }: Props) => {
     return () => {
       mountedRef.current = false;
       clearTimer();
+      // Simulated StrictMode remounts happen before any clip exists.
+      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      objectUrlsRef.current = [];
       // The session clock is only cleared on real unmount; StrictMode's
       // simulated remount happens before the clock is started.
       clearSessionClock();
@@ -886,7 +984,7 @@ export const CallView = ({ meetingId }: Props) => {
                 <div className="flex items-center gap-3 text-slate-400">
                   <LoaderIcon className="animate-spin size-5 shrink-0" />
                   <span className="text-sm">
-                    {phase === "starting" ? "Iniciando entrevista ..." : "El entrevistador está preparando la siguiente pregunta..."}
+                    {phase === "starting" ? "Preparando tus preguntas..." : "El entrevistador está preparando la siguiente pregunta..."}
                   </span>
                 </div>
               )}

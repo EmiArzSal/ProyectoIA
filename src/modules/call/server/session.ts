@@ -88,16 +88,15 @@ export async function loadActiveSession(
 /**
  * Appends one turn using optimistic concurrency: the write only succeeds if the
  * transcript is still exactly what we read, so concurrent/duplicate requests
- * cannot add extra turns.
+ * cannot add extra turns. Returns the updated session.
  */
-export async function appendTurn(session: ActiveSession, speakerId: string, text: string) {
+export async function appendTurn(session: ActiveSession, speakerId: string, text: string): Promise<ActiveSession> {
   const { meeting, items } = session;
   const startedAt = meeting.startedAt?.getTime() ?? Date.now();
   const ts = Math.max(0, Date.now() - startedAt);
 
-  const next = [...items, { speaker_id: speakerId, type: "text", text, start_ts: ts, stop_ts: ts }]
-    .map((item) => JSON.stringify(item))
-    .join("\n");
+  const nextItems = [...items, { speaker_id: speakerId, type: "text", text, start_ts: ts, stop_ts: ts }];
+  const next = nextItems.map((item) => JSON.stringify(item)).join("\n");
 
   const [updated] = await db
     .update(meetings)
@@ -113,4 +112,12 @@ export async function appendTurn(session: ActiveSession, speakerId: string, text
   if (!updated) {
     throw new SessionError(409, "La entrevista cambió de estado. Intenta de nuevo.");
   }
+
+  // The session as it is now, so a second turn can be appended in the same request.
+  return {
+    ...session,
+    meeting: { ...meeting, transcriptUrl: next },
+    items: nextItems,
+    state: getSessionState(nextItems, session.agent.id),
+  };
 }
