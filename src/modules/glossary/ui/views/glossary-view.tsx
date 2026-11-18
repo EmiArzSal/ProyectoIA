@@ -20,22 +20,16 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { DictionaryResult, DictionaryLookupResponse } from "@/modules/dictionary/server/lookup";
+import { lookupDictionary, validateWord, type DictionaryResult } from "@/modules/dictionary/lookup";
 import { Volume2Icon } from "lucide-react";
 
 async function playPronunciation(word: string, audioUrl?: string) {
   let sourceUrl = audioUrl;
 
   // Older saved entries store the dictionaryapi.dev URL, which currently returns 502.
-  // Refresh it through our authenticated lookup, which resolves the Wikimedia audio file.
+  // Look the word up again, which resolves the Wikimedia audio file.
   if (!sourceUrl || sourceUrl.startsWith("https://api.dictionaryapi.dev/media/pronunciations/")) {
-    try {
-      const response = await fetch(`/api/dictionary/lookup?word=${encodeURIComponent(word)}&lang=en`);
-      const data = await response.json() as DictionaryLookupResponse;
-      sourceUrl = response.ok ? data.audioUrl : undefined;
-    } catch {
-      sourceUrl = undefined;
-    }
+    sourceUrl = (await lookupDictionary(word)).audioUrl;
   }
 
   if (!sourceUrl) {
@@ -288,10 +282,10 @@ function DictionaryTab() {
   );
 
   const handleLookup = async () => {
-    const trimmed = word.trim();
     setLookupError(null);
-    if (!trimmed) {
-      setLookupError("Escribe una palabra para buscar.");
+    const valid = validateWord(word);
+    if (!valid.ok) {
+      setLookupError(valid.message);
       return;
     }
     setLoading(true);
@@ -302,21 +296,16 @@ function DictionaryTab() {
     setSelected(null);
     setCustomDef("");
     try {
-      const res = await fetch(`/api/dictionary/lookup?word=${encodeURIComponent(trimmed)}&lang=${lang}`);
-      const data = await res.json() as DictionaryLookupResponse;
-      if (!res.ok) {
-        setLookupError(data.error?.message ?? "No se pudo consultar el diccionario. Intenta de nuevo.");
-        return;
-      }
-      if (data.found && data.results.length > 0) {
+      const data = await lookupDictionary(valid.word);
+      if (data.error) {
+        setLookupError(data.error.message);
+      } else if (data.found && data.results.length > 0) {
         setResults(data.results);
         setPhonetic(data.phonetic);
         setAudioUrl(data.audioUrl);
       } else {
         setNotFound(true);
       }
-    } catch {
-      setLookupError("No se pudo conectar con el diccionario. Intenta de nuevo.");
     } finally {
       setLoading(false);
     }
