@@ -14,6 +14,7 @@ import { MeetingStatus, StreamTranscriptItem } from "../types";
 import JSONL from "jsonl-parse-stringify";
 import { inngest } from "@/inngest/client";
 import { getDailyUsage, MAX_SESSIONS_GLOBAL_PER_DAY } from "@/modules/call/server/limits";
+import { userHasConsent } from "@/modules/consent/server/procedures";
 import { buildInterviewPlan, savePlan } from "@/modules/call/server/plan";
 import { TOTAL_QUESTIONS } from "@/modules/call/constants";
 
@@ -295,6 +296,15 @@ export const meetingsRouter = createTRPCRouter({
         const existing = await assertMeetingExists(input.id, userId);
         if (existing.status !== "upcoming") {
           throw new TRPCError({ code: "CONFLICT", message: "La entrevista ya fue iniciada" });
+        }
+
+        // Recording consent is enforced here, not only in the UI: no interview
+        // (and no audio sent to the AI provider) without the current version.
+        if (!(await userHasConsent(userId))) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Antes de tu primera entrevista debes aceptar el aviso de grabación y privacidad.",
+          });
         }
 
         // Cost guard: per-user and platform-wide daily quotas.
