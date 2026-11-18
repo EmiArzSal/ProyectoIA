@@ -5,6 +5,7 @@ import { PREDEFINED_AGENTS } from "@/lib/predefined-agents";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import JSONL from "jsonl-parse-stringify";
 import { buildAchievementWrites } from "@/lib/award-achievements";
+import { reportColumns } from "@/lib/report-columns";
 import { localDate } from "@/lib/dates";
 import { AI_MODELS } from "@/lib/ai-models";
 import { getTopicTitle } from "@/lib/interview-topics";
@@ -668,7 +669,8 @@ export async function saveCorrections(meetingId: string, userId: string, report:
 export async function saveReport(meetingId: string, userId: string, report: InterviewReport) {
   const updated = await db
     .update(meetings)
-    .set({ summary: JSON.stringify(report), status: "completed", updatedAt: new Date() })
+    // `summary` is still written for the deploy that reads it; see schema.ts.
+    .set({ ...reportColumns(report), summary: JSON.stringify(report), status: "completed", updatedAt: new Date() })
     .where(and(meetingScope(meetingId, userId), eq(meetings.status, "processing")))
     .returning({ id: meetings.id });
   return updated.length > 0;

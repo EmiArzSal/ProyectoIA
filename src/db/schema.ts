@@ -1,5 +1,6 @@
 import { nanoid } from  "nanoid";
-import { pgTable, text, timestamp, boolean, pgEnum, integer, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, pgEnum, integer, jsonb, real, uniqueIndex, index } from "drizzle-orm/pg-core";
+import type { InterviewReport } from "@/lib/generate-summary";
 import { sql } from "drizzle-orm";
 
 export type CorrectionType = "grammar" | "vocabulary" | "technical";
@@ -79,7 +80,18 @@ export const meetings = pgTable("meetings", {
     // JSONL transcript built turn by turn by the server (see call/server/session.ts).
     // The column keeps its original name; only the property was renamed.
     transcript: text('transcript_url'),
+    // Deprecated: the report as JSON text. Replaced by `report`; dropped once
+    // the deploy that stops reading it is live.
     summary: text('summary'),
+    // The evaluation report, plus its headline numbers as plain columns so
+    // progress can be queried in SQL. Null = no evidence (see lib/report-columns).
+    report: jsonb('report').$type<InterviewReport>(),
+    englishLevel: text('english_level'),            // "A1" … "C2"
+    grammarScore: real('grammar_score'),            // 1–5
+    vocabularyScore: real('vocabulary_score'),
+    fluencyScore: real('fluency_score'),
+    technicalScore: real('technical_score'),
+    softSkillsScore: real('soft_skills_score'),
     // Set in the same transaction that applies streak, achievements and topic
     // progress, so a retried evaluation never applies them twice.
     rewardsAppliedAt: timestamp('rewards_applied_at'),

@@ -17,11 +17,23 @@ import { getDailyUsage, MAX_SESSIONS_GLOBAL_PER_DAY } from "@/modules/call/serve
 import { userHasConsent } from "@/modules/consent/server/procedures";
 import { buildInterviewPlan, savePlan } from "@/modules/call/server/plan";
 import { TOTAL_QUESTIONS } from "@/modules/call/constants";
+import { readReport } from "@/lib/report-columns";
 
 // Mock mode (UI development without API calls) is the only case where the
 // client may supply the transcript. Never honoured in production builds.
 const ALLOW_CLIENT_MOCK_TRANSCRIPT =
   process.env.NEXT_PUBLIC_SESSION_MOCK === "true" && process.env.NODE_ENV !== "production";
+
+// Every meeting column except the large ones (transcript and report), which
+// lists never show: the transcript has its own procedure, the report comes
+// with getOne only.
+const meetingSummaryColumns = (() => {
+  const columns: Partial<ReturnType<typeof getTableColumns<typeof meetings>>> = { ...getTableColumns(meetings) };
+  delete columns.transcript;
+  delete columns.summary;
+  delete columns.report;
+  return columns as Omit<ReturnType<typeof getTableColumns<typeof meetings>>, "transcript" | "summary" | "report">;
+})();
 
 async function assertMeetingExists(id: string, userId: string) {
   const [existing] = await db
@@ -475,9 +487,11 @@ export const meetingsRouter = createTRPCRouter({
     getOne: protectedProcedure
     .input(z.object({id: z.string()}))
     .query(async ({input, ctx}) => {
-        const [existingMeeting] = await db
+        const [row] = await db
             .select({
-              ...getTableColumns(meetings),
+              ...meetingSummaryColumns,
+              report: meetings.report,
+              summary: meetings.summary,
               duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
             })
             .from(meetings)
@@ -488,12 +502,15 @@ export const meetingsRouter = createTRPCRouter({
               )
             );
 
-            if(!existingMeeting) {
+            if(!row) {
                 throw new TRPCError({
                     code: "NOT_FOUND",
                     message: "Entrevista no encontrada",
                 });
             }
+        // The report, from the jsonb column or the old text one; never both.
+        const { summary, ...existingMeeting } = row;
+        existingMeeting.report = readReport({ report: row.report, summary });
 
         const agent = getPredefinedAgent(existingMeeting.agentId) ?? {
           id: existingMeeting.agentId,
@@ -550,7 +567,7 @@ export const meetingsRouter = createTRPCRouter({
 
       const data = await db
         .select({
-          ...getTableColumns(meetings),
+          ...meetingSummaryColumns,
           duration: sql<number>`EXTRACT(EPOCH FROM (ended_at - started_at))`.as("duration"),
         })
         .from(meetings)

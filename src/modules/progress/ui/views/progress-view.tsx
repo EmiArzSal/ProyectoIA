@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingState } from "@/components/loading-state";
 import { ErrorState } from "@/components/error-state";
 import type { TopicProgressItem, TopicStatus } from "@/modules/progress/server/procedures";
+import { EvolutionSection } from "@/modules/progress/ui/components/evolution-section";
 
 const STATUS: Record<TopicStatus, { label: string; badge: string; card: string }> = {
   new:      { label: "Sin practicar", badge: "bg-gray-100 text-gray-500 border-gray-200",          card: "border-gray-200 bg-gray-50/60" },
@@ -172,6 +173,9 @@ export function ProgressView() {
           </Button>
         </div>
       )}
+
+      {/* English level and scores over time */}
+      {summary.practiced > 0 && <EvolutionSection />}
 
       {/* Topics to reinforce */}
       {summary.weak.length > 0 && (
