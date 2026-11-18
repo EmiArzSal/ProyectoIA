@@ -1,5 +1,6 @@
 import { nanoid } from  "nanoid";
 import { pgTable, text, timestamp, boolean, pgEnum, integer, jsonb, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export type CorrectionType = "grammar" | "vocabulary" | "technical";
 
@@ -23,7 +24,10 @@ export const session = pgTable("session", {
     ipAddress: text('ip_address'),
     userAgent: text('user_agent'),
     userId: text('user_id').notNull().references(()=> user.id, { onDelete: 'cascade' })
-});
+}, (t) => [
+  // better-auth lists/revokes a user's sessions; also the account-deletion cascade.
+  index("session_user_idx").on(t.userId),
+]);
 
 export const account = pgTable("account", {
     id: text('id').primaryKey(),
@@ -39,7 +43,9 @@ export const account = pgTable("account", {
     password: text('password'),
     createdAt: timestamp('created_at').notNull(),
     updatedAt: timestamp('updated_at').notNull()
-});
+}, (t) => [
+  index("account_user_idx").on(t.userId),
+]);
 
 export const verification = pgTable("verification", {
     id: text('id').primaryKey(),
@@ -89,7 +95,16 @@ export const meetings = pgTable("meetings", {
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow()
 
-});
+}, (t) => [
+  // History list (order + pagination), its total, the home page's "this
+  // week/month" counts and per-interviewer counts: one user's rows, in order.
+  index("meetings_user_created_idx").on(t.userId, t.createdAt.desc().nullsFirst(), t.id.desc().nullsFirst()),
+  // Completed interviews: stats, progress, achievements.
+  index("meetings_user_status_idx").on(t.userId, t.status),
+  // Abandoned-interview cron. Partial: only interviews in progress, so it is
+  // almost always empty and costs nothing to other writes.
+  index("meetings_active_started_idx").on(t.startedAt).where(sql`status = 'active'`),
+]);
 
 export const glossaryEntries = pgTable("glossary_entries", {
   id: text('id').primaryKey().$defaultFn(() => nanoid()),
@@ -97,7 +112,9 @@ export const glossaryEntries = pgTable("glossary_entries", {
   term: text('term').notNull(),
   definition: text('definition').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  index("glossary_entries_user_created_idx").on(t.userId, t.createdAt.desc().nullsFirst()),
+]);
 
 export const userStats = pgTable("user_stats", {
   id: text('id').primaryKey().$defaultFn(() => nanoid()),
@@ -131,7 +148,10 @@ export const dictionaryEntries = pgTable("dictionary_entries", {
   language: text('language').notNull(), // 'en' | 'es'
   letter: text('letter').notNull(),     // primera letra en mayúscula
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  // Matches the alphabetical listing, so no sort is needed.
+  index("dictionary_entries_user_letter_word_idx").on(t.userId, t.letter, t.word),
+]);
 
 export const corrections = pgTable("corrections", {
   id: text('id').primaryKey().$defaultFn(() => nanoid()),
@@ -142,7 +162,11 @@ export const corrections = pgTable("corrections", {
   type: text('type').notNull(), // "grammar" | "vocabulary" | "technical"
   note: text('note').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
-});
+}, (t) => [
+  index("corrections_user_created_idx").on(t.userId, t.createdAt.desc().nullsFirst()),
+  // Meeting deletion cascade and saveCorrections' delete-by-meeting.
+  index("corrections_meeting_idx").on(t.meetingId),
+]);
 // ── Interview plan ────────────────────────────────────────────────────────────
 // The 10 questions chosen for a meeting when it starts (6 technical + 4 soft).
 // Topics come from src/lib/interview-topics.ts.
