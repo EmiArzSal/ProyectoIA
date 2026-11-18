@@ -3,7 +3,7 @@ import "server-only";
 import OpenAI from "openai";
 import { AI_MODELS, INTERVIEWER_MAX_TOKENS } from "@/lib/ai-models";
 import { NO_ANSWER } from "../constants";
-import { composeMessage, messageClips, type Clip } from "../interviewer-script";
+import { joinClips, messageClips, type SpokenClip } from "../interviewer-script";
 import type { ActiveSession } from "./session";
 
 // The interviewer's message for each turn is composed by code (see
@@ -65,7 +65,7 @@ async function acknowledge(session: ActiveSession, question: string, answer: str
   }
 }
 
-export type AgentTurn = { text: string; clips: Clip[] };
+export type AgentTurn = { text: string; clips: SpokenClip[] };
 
 /** Builds the interviewer's next message. Callers must check state.canAgentRespond first. */
 export async function composeAgentTurn(session: ActiveSession): Promise<AgentTurn> {
@@ -79,5 +79,6 @@ export async function composeAgentTurn(session: ActiveSession): Promise<AgentTur
     ack = await acknowledge(session, plan[answered - 1].question, lastAnswer, answered);
   }
 
-  return { text: composeMessage(answered, agent, questions, ack), clips: messageClips(answered) };
+  const clips = messageClips(answered, agent, questions, ack);
+  return { text: joinClips(clips), clips };
 }

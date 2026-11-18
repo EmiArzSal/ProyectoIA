@@ -32,7 +32,9 @@ import {
 } from "@/modules/call/constants";
 import { MicCheck } from "@/modules/call/ui/components/mic-check";
 import { CONSENT_VERSION } from "@/lib/consent";
-import { CLOSING_AUDIO_URL, introAudioUrl, introText, type Clip } from "@/modules/call/interviewer-script";
+import { CLOSING_AUDIO_URL, introAudioUrl, introText, type Clip, type SpokenClip } from "@/modules/call/interviewer-script";
+import { clipRanges } from "@/modules/call/karaoke";
+import { KaraokeText, type KaraokeRange } from "@/modules/call/ui/components/karaoke-text";
 import {
   MIC_ERROR_MESSAGES,
   pickRecorderMimeType,
@@ -105,7 +107,7 @@ type QuestionRecord = {
 type UserTurnResult = { audio: Blob | null; skipped: boolean; mockText?: string };
 
 // The interviewer's message and the audio clips it is spoken with, in order.
-type AgentTurn = { text: string; clips: Clip[] };
+type AgentTurn = { text: string; clips: SpokenClip[] };
 
 type PlayOutcome = "ended" | "error" | "blocked" | "stopped";
 
@@ -162,6 +164,8 @@ export const CallView = ({ meetingId }: Props) => {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [unanswered, setUnanswered]    = useState<QuestionRecord[]>([]);
   const [sessionSecondsLeft, setSessionSecondsLeft] = useState<number | null>(null);
+  // Part of currentText being spoken (karaoke highlight); null = not speaking.
+  const [karaoke, setKaraoke]          = useState<KaraokeRange | null>(null);
 
   // ── Refs ─────────────────────────────────────────────────────────────────────
 
@@ -273,6 +277,14 @@ export const CallView = ({ meetingId }: Props) => {
     }
     playbackResolveRef.current?.("stopped");
     playbackResolveRef.current = null;
+    setKaraoke(null);
+  };
+
+  /** Plays one clip while highlighting the characters `range` of currentText. */
+  const speak = (url: string, range: KaraokeRange) => {
+    const playback = playUrl(url); // sets the new src first, so the highlight starts from 0
+    setKaraoke(range);
+    return playback;
   };
 
   const warnAudioBlocked = () => {
@@ -331,27 +343,35 @@ export const CallView = ({ meetingId }: Props) => {
   // Speaks the interviewer's message clip by clip. Every clip starts loading
   // at once (the question is usually prefetched already), so the next one is
   // ready when the previous ends.
-  const playAgentTurn = async (turn: AgentTurn): Promise<void> => {
+  // `startAt` skips clips already played (the greeting, started in the click).
+  const playAgentTurn = async (turn: AgentTurn, startAt = 0): Promise<void> => {
     if (IS_MOCK) {
       await new Promise<void>((r) => setTimeout(r, 300));
       return;
     }
-    const sources = turn.clips.map((clip) => ({ clip, url: clipSource(clip) }));
-    for (const { clip, url } of sources) {
+    const ranges = clipRanges(turn.clips);
+    const sources = turn.clips.map((clip, i) => ({
+      clip,
+      range: ranges[i],
+      url: i >= startAt ? clipSource(clip) : null,
+    }));
+    for (const { clip, range, url } of sources.slice(startAt)) {
       if (shouldStop()) return;
+      setKaraoke({ from: range.from, to: range.from }); // earlier clips lit while this one loads
       const src = await url;
-      let outcome = src ? await playUrl(src) : "error";
+      let outcome = src ? await speak(src, range) : "error";
       // A pre-recorded file that is missing: generate it instead.
       if (outcome === "error" && (clip.kind === "intro" || clip.kind === "closing")) {
         const generated = await fetchSpeech({ part: clip.kind });
-        if (generated && !shouldStop()) outcome = await playUrl(generated);
+        if (generated && !shouldStop()) outcome = await speak(generated, range);
       }
       if (outcome === "stopped") return;
       if (outcome === "blocked") {
         warnAudioBlocked();
-        return;
+        break;
       }
     }
+    setKaraoke(null);
   };
 
   // The server decides the prompt and progress from its own transcript.
@@ -656,11 +676,15 @@ export const CallView = ({ meetingId }: Props) => {
       if (greeted === "error" && !shouldStop()) {
         // The pre-recorded file is missing: generate the greeting instead.
         const generated = await fetchSpeech({ part: "intro" });
-        if (generated && !shouldStop()) greeted = await playUrl(generated);
+        if (generated && !shouldStop()) greeted = await speak(generated, clipRanges(intro.clips)[0]);
       }
       if (shouldStop()) return;
-      if (greeted === "blocked") warnAudioBlocked();
-      else await playAgentTurn({ ...intro, clips: intro.clips.filter((c) => c.kind !== "intro") });
+      if (greeted === "blocked") {
+        warnAudioBlocked();
+        setKaraoke(null);
+      } else {
+        await playAgentTurn(intro, 1); // the greeting was clip 0
+      }
       if (shouldStop()) return;
 
       // 3. 10-question loop
@@ -761,7 +785,7 @@ export const CallView = ({ meetingId }: Props) => {
     runStartedRef.current = true;
     // Started inside the click, which also unlocks the audio element for the
     // rest of the interview in browsers with strict autoplay rules (Safari).
-    const greeting = IS_MOCK ? null : playUrl(introAudioUrl(meeting.agent.id));
+    const greeting = IS_MOCK ? null : speak(introAudioUrl(meeting.agent.id), { from: 0, to: introText(meeting.agent).length });
     if (IS_MOCK) unlockAudio();
     else {
       // Show what is being said; question 1 is added when the plan is ready.
@@ -989,7 +1013,7 @@ export const CallView = ({ meetingId }: Props) => {
             <div className="w-full rounded-2xl bg-slate-800/60 border border-slate-700/60 p-6 min-h-[120px] flex items-start">
               {phase === "starting" && currentText && (
                 <div className="flex flex-col gap-3">
-                  <p className="text-base leading-relaxed text-slate-100">{currentText}</p>
+                  <KaraokeText text={currentText} range={karaoke} audio={audioElRef.current} />
                   <div className="flex items-center gap-2 text-slate-400">
                     <LoaderIcon className="animate-spin size-4 shrink-0" />
                     <span className="text-xs">Preparando tus preguntas...</span>
@@ -1005,7 +1029,7 @@ export const CallView = ({ meetingId }: Props) => {
                 </div>
               )}
               {(phase === "playing" || isUserTurnActive || phase === "transcribing") && (
-                <p className="text-base leading-relaxed text-slate-100">{currentText}</p>
+                <KaraokeText text={currentText} range={karaoke} audio={audioElRef.current} />
               )}
               {(phase === "finishing" || phase === "done") && (
                 <div className="flex items-center gap-3 text-slate-400">

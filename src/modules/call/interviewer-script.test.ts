@@ -14,6 +14,7 @@ import {
   composeMessage,
   introAudioUrl,
   introText,
+  joinClips,
   messageClips,
   questionSpeech,
 } from "./interviewer-script";
@@ -73,17 +74,29 @@ describe("ackFromMessage", () => {
 });
 
 describe("messageClips", () => {
+  const kinds = (answered: number) =>
+    messageClips(answered, agent, questions, "Thanks.").map((c) =>
+      c.kind === "question" ? { kind: c.kind, index: c.index } : { kind: c.kind });
+
   it("plays the greeting and question 1 first", () => {
-    assert.deepEqual(messageClips(0), [{ kind: "intro" }, { kind: "question", index: 0 }]);
+    assert.deepEqual(kinds(0), [{ kind: "intro" }, { kind: "question", index: 0 }]);
   });
 
   it("plays the ack and the next question in the middle", () => {
-    assert.deepEqual(messageClips(1), [{ kind: "ack" }, { kind: "question", index: 1 }]);
-    assert.deepEqual(messageClips(TOTAL_QUESTIONS - 1), [{ kind: "ack" }, { kind: "question", index: TOTAL_QUESTIONS - 1 }]);
+    assert.deepEqual(kinds(1), [{ kind: "ack" }, { kind: "question", index: 1 }]);
+    assert.deepEqual(kinds(TOTAL_QUESTIONS - 1), [{ kind: "ack" }, { kind: "question", index: TOTAL_QUESTIONS - 1 }]);
   });
 
   it("plays the ack and the closing at the end", () => {
-    assert.deepEqual(messageClips(TOTAL_QUESTIONS), [{ kind: "ack" }, { kind: "closing" }]);
+    assert.deepEqual(kinds(TOTAL_QUESTIONS), [{ kind: "ack" }, { kind: "closing" }]);
+  });
+
+  it("carries the words each clip says, which add up to the stored message", () => {
+    for (let answered = 0; answered <= TOTAL_QUESTIONS; answered++) {
+      const clips = messageClips(answered, agent, questions, "Thanks.");
+      assert.equal(joinClips(clips), composeMessage(answered, agent, questions, "Thanks."));
+    }
+    assert.deepEqual(messageClips(0, agent, questions, "").map((c) => c.text), [introText(agent), questions[0]]);
   });
 
   it("includes the behavioral transition in question 7's clip", () => {

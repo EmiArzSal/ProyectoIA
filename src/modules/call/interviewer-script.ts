@@ -33,19 +33,51 @@ export function questionSpeech(question: string, index: number): string {
   return index === TECH_QUESTIONS ? `${BEHAVIORAL_TRANSITION} ${question}` : question;
 }
 
+export type Clip =
+  | { kind: "intro" }
+  | { kind: "ack" }
+  | { kind: "question"; index: number }
+  | { kind: "closing" };
+
+/** A clip and the words it says (the call UI highlights them as they are spoken). */
+export type SpokenClip = Clip & { text: string };
+
 /**
- * The interviewer's message after `answered` answers. `ack` is ignored for
- * the intro. Produces exactly the text stored in the transcript.
+ * The clips of the interviewer's message after `answered` answers, in
+ * playback order. `ack` is ignored for the intro.
  */
+export function messageClips(
+  answered: number,
+  agent: Pick<Interviewer, "interviewerName" | "role">,
+  questions: string[],
+  ack: string,
+): SpokenClip[] {
+  if (answered === 0) {
+    return [
+      { kind: "intro", text: introText(agent) },
+      { kind: "question", index: 0, text: questionSpeech(questions[0], 0) },
+    ];
+  }
+  if (answered >= TOTAL_QUESTIONS) {
+    return [{ kind: "ack", text: ack }, { kind: "closing", text: CLOSING_TEXT }];
+  }
+  return [
+    { kind: "ack", text: ack },
+    { kind: "question", index: answered, text: questionSpeech(questions[answered], answered) },
+  ];
+}
+
+/** The clips' texts joined: exactly the message stored in the transcript. */
+export const joinClips = (clips: Pick<SpokenClip, "text">[]) => clips.map((c) => c.text).join(" ");
+
+/** The interviewer's message after `answered` answers, as stored in the transcript. */
 export function composeMessage(
   answered: number,
   agent: Pick<Interviewer, "interviewerName" | "role">,
   questions: string[],
   ack: string,
 ): string {
-  if (answered === 0) return `${introText(agent)} ${questions[0]}`;
-  if (answered >= TOTAL_QUESTIONS) return `${ack} ${CLOSING_TEXT}`;
-  return `${ack} ${questionSpeech(questions[answered], answered)}`;
+  return joinClips(messageClips(answered, agent, questions, ack));
 }
 
 /**
@@ -69,19 +101,6 @@ export function ackFromMessage(message: string, answered: number, questions: str
   if (!tail || !message.endsWith(` ${tail}`)) return null;
   const ack = message.slice(0, -(tail.length + 1)).trim();
   return ack || null;
-}
-
-export type Clip =
-  | { kind: "intro" }
-  | { kind: "ack" }
-  | { kind: "question"; index: number }
-  | { kind: "closing" };
-
-/** The clips that make up the message composed after `answered` answers, in playback order. */
-export function messageClips(answered: number): Clip[] {
-  if (answered === 0) return [{ kind: "intro" }, { kind: "question", index: 0 }];
-  if (answered >= TOTAL_QUESTIONS) return [{ kind: "ack" }, { kind: "closing" }];
-  return [{ kind: "ack" }, { kind: "question", index: answered }];
 }
 
 /**
