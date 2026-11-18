@@ -60,20 +60,6 @@ export const verification = pgTable("verification", {
     updatedAt: timestamp('updated_at').$defaultFn(() => /* @__PURE__ */ new Date())
 });
 
-export const agents = pgTable("agents", {
-    id: text('id')
-    .primaryKey()
-    .$defaultFn(() => nanoid()),
-    name: text('name').notNull(),
-    userId: text("user_id")
-    .notNull()
-    .references(() => user.id, { onDelete: 'cascade' }),
-    instructions: text('instructions').notNull(),
-    createdAt: timestamp('created_at').notNull().defaultNow(),
-    updatedAt: timestamp('updated_at').notNull().defaultNow()
-
-});
-
 // "failed": the evaluation job ran out of retries; the user can retry it.
 export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing","cancelled", "failed"]);
 
@@ -90,8 +76,9 @@ export const meetings = pgTable("meetings", {
     status: meetingStatus("status").notNull().default("upcoming"),
     startedAt: timestamp('started_at'),
     endedAt: timestamp('ended_at'),
-    transcriptUrl: text('transcript_url'),
-    recordingUrl: text('recording_url'),
+    // JSONL transcript built turn by turn by the server (see call/server/session.ts).
+    // The column keeps its original name; only the property was renamed.
+    transcript: text('transcript_url'),
     summary: text('summary'),
     // Set in the same transaction that applies streak, achievements and topic
     // progress, so a retried evaluation never applies them twice.

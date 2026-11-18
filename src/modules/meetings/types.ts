@@ -13,7 +13,8 @@ export enum MeetingStatus{
     Failed = "Failed",
 }
 
-export type StreamTranscriptItem = {
+/** One turn of an interview, as stored (one JSON line each) in meetings.transcript. */
+export type TranscriptItem = {
     speaker_id: string;
     type: string;
     text: string;
