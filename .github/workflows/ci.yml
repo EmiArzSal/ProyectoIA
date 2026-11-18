@@ -1,0 +1,46 @@
+# Types, lint and unit tests on every pull request and on main.
+# No secrets: the tests are pure logic (no database, OpenAI or network), and
+# the production build is left to Vercel, which builds every PR as a preview.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push to the same branch cancels the run in progress.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Same flag as Vercel (vercel.json); `ci` installs exactly the lockfile.
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      # next-env.d.ts and the route types are gitignored; generate them.
+      - name: Generate Next.js types
+        run: npx next typegen
+
+      - name: Types
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test

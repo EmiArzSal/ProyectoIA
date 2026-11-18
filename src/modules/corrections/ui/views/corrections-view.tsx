@@ -12,6 +12,7 @@ import { es } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { CorrectionType } from "@/db/schema";
+import { AddCorrectionButton } from "@/modules/glossary/ui/components/add-correction-button";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ function CorrectionCard({
   note,
   meetingName,
   createdAt,
+  inGlossary,
   onRemove,
 }: {
   id: string;
@@ -48,6 +50,7 @@ function CorrectionCard({
   note: string;
   meetingName: string | null;
   createdAt: Date;
+  inGlossary: boolean;
   onRemove: (id: string) => void;
 }) {
   return (
@@ -87,9 +90,12 @@ function CorrectionCard({
       {/* Note */}
       <p className="text-xs text-muted-foreground leading-relaxed">{note}</p>
 
-      <p className="text-xs text-gray-400">
-        {format(new Date(createdAt), "d 'de' MMMM yyyy", { locale: es })}
-      </p>
+      <div className="flex items-center justify-between gap-2 mt-auto">
+        <p className="text-xs text-gray-400">
+          {format(new Date(createdAt), "d 'de' MMMM yyyy", { locale: es })}
+        </p>
+        <AddCorrectionButton correctionId={id} inGlossary={inGlossary} />
+      </div>
     </div>
   );
 }

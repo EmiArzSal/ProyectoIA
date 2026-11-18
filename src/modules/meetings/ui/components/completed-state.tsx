@@ -18,6 +18,9 @@ import { Transcript } from "./transcript";
 import { cn } from "@/lib/utils";
 import type { InterviewReport, AnnotatedSegment } from "@/lib/generate-summary";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/trpc/client";
+import { AddCorrectionButton } from "@/modules/glossary/ui/components/add-correction-button";
 import {
   Popover,
   PopoverContent,
@@ -163,7 +166,10 @@ const ANNOTATION_TYPE_LABEL: Record<string, string> = {
   technical: "Técnico",
 };
 
-function AnnotatedAnswer({ segments }: { segments: AnnotatedSegment[] }) {
+function AnnotatedAnswer({ segments, meetingId }: { segments: AnnotatedSegment[]; meetingId: string }) {
+  const trpc = useTRPC();
+  // One request for the whole report (React Query shares it between answers).
+  const { data: saved = [] } = useQuery(trpc.corrections.getForMeeting.queryOptions({ meetingId }));
   if (!segments || segments.length === 0) return null;
 
   return (
@@ -193,6 +199,13 @@ function AnnotatedAnswer({ segments }: { segments: AnnotatedSegment[] }) {
                   <span className="font-semibold text-emerald-700 text-xs">{seg.annotation.corrected}</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">{seg.annotation.note}</p>
+                {(() => {
+                  // The stored correction for this annotation (same text and correction).
+                  const correction = saved.find((c) => c.original === seg.text && c.corrected === seg.annotation!.corrected);
+                  return correction ? (
+                    <AddCorrectionButton correctionId={correction.id} inGlossary={correction.inGlossary} className="self-start" />
+                  ) : null;
+                })()}
               </div>
             </PopoverContent>
           </Popover>
@@ -202,7 +215,7 @@ function AnnotatedAnswer({ segments }: { segments: AnnotatedSegment[] }) {
   );
 }
 
-function QuestionItem({ q, index }: { q: InterviewReport["questions"][number]; index: number }) {
+function QuestionItem({ q, index, meetingId }: { q: InterviewReport["questions"][number]; index: number; meetingId: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-xl border bg-white overflow-hidden">
@@ -235,7 +248,7 @@ function QuestionItem({ q, index }: { q: InterviewReport["questions"][number]; i
           <div className="pt-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tu respuesta</p>
             {q.userAnswerAnnotated && q.userAnswerAnnotated.length > 0 ? (
-              <AnnotatedAnswer segments={q.userAnswerAnnotated} />
+              <AnnotatedAnswer segments={q.userAnswerAnnotated} meetingId={meetingId} />
             ) : (
               <p className="text-sm text-gray-700 leading-relaxed italic">
                 {q.userAnswer || <span className="text-gray-400 not-italic">Sin respuesta</span>}
@@ -430,7 +443,7 @@ export const CompletedState = ({ data }: Props) => {
                   Desglose por pregunta
                 </h3>
                 {report.questions.map((q, i) => (
-                  <QuestionItem key={i} q={q} index={i} />
+                  <QuestionItem key={i} q={q} index={i} meetingId={data.id} />
                 ))}
               </div>
             )}

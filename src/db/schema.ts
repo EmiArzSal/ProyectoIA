@@ -109,11 +109,30 @@ export const meetings = pgTable("meetings", {
 export const glossaryEntries = pgTable("glossary_entries", {
   id: text('id').primaryKey().$defaultFn(() => nanoid()),
   userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
-  term: text('term').notNull(),
+  term: text('term').notNull(),             // trimmed, single spaces (normalizeTerm)
+  // Computed by the database, for the one-card-per-term rule (any case).
+  termKey: text('term_key').notNull().generatedAlwaysAs(sql`lower(term)`),
   definition: text('definition').notNull(),
+  // "manual" (written by the user) | "correction" (from an interview report:
+  // term = what was said, definition = the corrected version).
+  source: text('source').notNull().default('manual'),
+  note: text('note'),                       // correction cards: why it was corrected
+  // Kept when the interview (and so the correction) is deleted.
+  correctionId: text('correction_id').references(() => corrections.id, { onDelete: 'set null' }),
+  // Spaced repetition (see modules/glossary/review.ts).
+  box: integer('box').notNull().default(0), // 0–5
+  dueAt: timestamp('due_at').notNull().defaultNow(),
+  lastReviewedAt: timestamp('last_reviewed_at'),
+  reviewCount: integer('review_count').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 }, (t) => [
   index("glossary_entries_user_created_idx").on(t.userId, t.createdAt.desc().nullsFirst()),
+  // One card per term, ignoring case.
+  uniqueIndex("glossary_entries_user_term_key_idx").on(t.userId, t.termKey),
+  // One card per correction.
+  uniqueIndex("glossary_entries_user_correction_idx").on(t.userId, t.correctionId).where(sql`correction_id IS NOT NULL`),
+  // The review queue: cards due now.
+  index("glossary_entries_user_due_idx").on(t.userId, t.dueAt),
 ]);
 
 export const userStats = pgTable("user_stats", {
