@@ -30,7 +30,7 @@ type TranscriptItem = {
   stop_ts: number;
 };
 
-// ── Report schema (stored as JSON string in summary column) ──────────────────
+// ── Report schema (stored in meetings.report, see lib/report-columns) ────────
 
 export type AnnotatedSegment = {
   text: string;
@@ -669,8 +669,7 @@ export async function saveCorrections(meetingId: string, userId: string, report:
 export async function saveReport(meetingId: string, userId: string, report: InterviewReport) {
   const updated = await db
     .update(meetings)
-    // `summary` is still written for the deploy that reads it; see schema.ts.
-    .set({ ...reportColumns(report), summary: JSON.stringify(report), status: "completed", updatedAt: new Date() })
+    .set({ ...reportColumns(report), status: "completed", updatedAt: new Date() })
     .where(and(meetingScope(meetingId, userId), eq(meetings.status, "processing")))
     .returning({ id: meetings.id });
   return updated.length > 0;

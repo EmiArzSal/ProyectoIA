@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import type { InterviewReport } from "./generate-summary";
-import { cefrRank, readReport, reportColumns } from "./report-columns";
+import { cefrRank, reportColumns } from "./report-columns";
 
 const report = (over: Partial<InterviewReport> = {}, scores: Partial<InterviewReport["scores"]> = {}): InterviewReport => ({
   summary: "Resumen.",
@@ -64,23 +64,6 @@ describe("reportColumns", () => {
 
   it("handles reports from before soft skills were scored", () => {
     assert.equal(reportColumns(report({}, { softSkills: undefined })).softSkillsScore, null);
-  });
-});
-
-describe("readReport", () => {
-  const r = report();
-
-  it("prefers the jsonb column", () => {
-    assert.equal(readReport({ report: r, summary: "{broken" }), r);
-  });
-
-  it("falls back to the old text column", () => {
-    assert.deepEqual(readReport({ report: null, summary: JSON.stringify(r) }), r);
-  });
-
-  it("returns null without a report or with broken text", () => {
-    assert.equal(readReport({ report: null, summary: null }), null);
-    assert.equal(readReport({ summary: "{broken" }), null);
   });
 });
 

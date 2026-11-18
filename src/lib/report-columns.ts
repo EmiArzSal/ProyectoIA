@@ -47,17 +47,3 @@ export function reportColumns(report: InterviewReport): ReportColumns {
     softSkillsScore: score(s.softSkills),
   };
 }
-
-/**
- * The report of a meeting. Reads the jsonb column; meetings evaluated before
- * it existed still have only the old text column (summary).
- */
-export function readReport(row: { report?: InterviewReport | null; summary?: string | null }): InterviewReport | null {
-  if (row.report) return row.report;
-  if (!row.summary) return null;
-  try {
-    return JSON.parse(row.summary) as InterviewReport;
-  } catch {
-    return null;
-  }
-}

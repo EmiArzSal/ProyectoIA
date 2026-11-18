@@ -80,9 +80,6 @@ export const meetings = pgTable("meetings", {
     // JSONL transcript built turn by turn by the server (see call/server/session.ts).
     // The column keeps its original name; only the property was renamed.
     transcript: text('transcript_url'),
-    // Deprecated: the report as JSON text. Replaced by `report`; dropped once
-    // the deploy that stops reading it is live.
-    summary: text('summary'),
     // The evaluation report, plus its headline numbers as plain columns so
     // progress can be queried in SQL. Null = no evidence (see lib/report-columns).
     report: jsonb('report').$type<InterviewReport>(),
