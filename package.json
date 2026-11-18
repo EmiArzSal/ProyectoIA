@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "db:push": "drizzle-kit push",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "db:studio": "drizzle-kit studio",

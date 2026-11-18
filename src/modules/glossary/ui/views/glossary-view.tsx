@@ -17,10 +17,13 @@ import {
   LoaderIcon,
   CheckIcon,
   BookOpenIcon,
+  RepeatIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { lookupDictionary, validateWord, type DictionaryResult } from "@/modules/dictionary/lookup";
+import { describeDue, MAX_BOX } from "@/modules/glossary/review";
+import { cardLabels, ReviewSession } from "@/modules/glossary/ui/components/review-session";
 import { Volume2Icon } from "lucide-react";
 
 async function playPronunciation(word: string, audioUrl?: string) {
@@ -55,18 +58,41 @@ async function playPronunciation(word: string, audioUrl?: string) {
 
 // ── Flashcard ────────────────────────────────────────────────────────────────
 
+/** How well the card is known: one dot per box reached. */
+function BoxDots({ box }: { box: number }) {
+  return (
+    <span className="flex gap-0.5" title={box >= MAX_BOX ? "Dominada" : `Caja ${box} de ${MAX_BOX}`}>
+      {Array.from({ length: MAX_BOX }, (_, i) => (
+        <span key={i} className={cn("size-1.5 rounded-full", i < box ? "bg-emerald-500" : "bg-gray-200")} />
+      ))}
+    </span>
+  );
+}
+
 function Flashcard({
   id,
   term,
   definition,
+  note,
+  source,
+  box,
+  dueAt,
+  now,
   onRemove,
 }: {
   id: string;
   term: string;
   definition: string;
+  note: string | null;
+  source: string;
+  box: number;
+  dueAt: Date;
+  now: Date;
   onRemove: (id: string) => void;
 }) {
   const [flipped, setFlipped] = useState(false);
+  const labels = cardLabels(source);
+  const due = describeDue(dueAt, now);
 
   return (
     <div
@@ -86,13 +112,19 @@ function Flashcard({
           className="absolute inset-0 rounded-xl border bg-white flex flex-col items-center justify-center gap-2 p-6 shadow-sm hover:shadow-md transition-shadow select-none"
           style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden", transform: "translateZ(0.1px)" }}
         >
+          <div className="absolute top-3 inset-x-3 flex items-center justify-between">
+            <span className={cn("text-[10px] font-medium", due === "Para hoy" ? "text-primary" : "text-muted-foreground")}>
+              {box >= MAX_BOX ? "Dominada" : due}
+            </span>
+            <BoxDots box={box} />
+          </div>
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
-            Término
+            {labels.front}
           </p>
           <p className="text-base font-semibold text-gray-800 text-center leading-snug break-words w-full">
             {term}
           </p>
-          <p className="text-[11px] text-muted-foreground mt-2">Toca para ver definición</p>
+          <p className="text-[11px] text-muted-foreground mt-2">Toca para ver {labels.back.toLowerCase()}</p>
         </div>
 
         {/* Back — definition */}
@@ -105,11 +137,12 @@ function Flashcard({
           }}
         >
           <p className="text-[10px] font-semibold text-primary/70 uppercase tracking-widest">
-            Definición
+            {labels.back}
           </p>
           <p className="text-base font-semibold text-gray-800 text-center leading-snug break-words w-full">
             {definition}
           </p>
+          {note && <p className="text-[11px] text-muted-foreground text-center leading-relaxed line-clamp-3">{note}</p>}
           <button
             className="absolute bottom-3 right-3 text-[11px] text-muted-foreground hover:text-red-500 transition-colors flex gap-1 shrink-0"
             onClick={(e) => { e.stopPropagation(); onRemove(id); }}
@@ -134,9 +167,12 @@ function AddFlashcardForm({ onClose }: { onClose: () => void }) {
     trpc.glossary.create.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries(trpc.glossary.getMany.queryOptions());
+        void queryClient.invalidateQueries(trpc.glossary.getReviewQueue.queryOptions());
         toast.success("Entrada agregada al glosario.");
         onClose();
       },
+      // e.g. "Ya tienes «closure» en tu glosario."
+      onError: (err) => toast.error(err.message),
     })
   );
 
@@ -174,11 +210,21 @@ function FlashcardsTab() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
+  const [reviewing, setReviewing] = useState(false);
 
   const { data = [], isLoading } = useQuery(trpc.glossary.getMany.queryOptions());
+  const { data: queue } = useQuery(trpc.glossary.getReviewQueue.queryOptions());
   const remove = useMutation(trpc.glossary.remove.mutationOptions({
-    onSuccess: () => queryClient.invalidateQueries(trpc.glossary.getMany.queryOptions()),
+    onSuccess: () => {
+      void queryClient.invalidateQueries(trpc.glossary.getMany.queryOptions());
+      void queryClient.invalidateQueries(trpc.glossary.getReviewQueue.queryOptions());
+    },
   }));
+  const now = new Date();
+
+  if (reviewing && queue && queue.cards.length > 0) {
+    return <ReviewSession cards={queue.cards} total={queue.total} onClose={() => setReviewing(false)} />;
+  }
 
   const filtered = search.trim()
     ? data.filter((e) => e.term.toLowerCase().includes(search.toLowerCase()) || e.definition.toLowerCase().includes(search.toLowerCase()))
@@ -190,9 +236,16 @@ function FlashcardsTab() {
         {data.length > 4 && (
           <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="max-w-xs" />
         )}
-        <Button size="sm" className="gap-1.5 ml-auto" onClick={() => setShowForm(true)} disabled={showForm}>
-          <PlusIcon className="size-4" /> Nueva entrada
-        </Button>
+        <div className="flex items-center gap-2 ml-auto">
+          {queue && queue.total > 0 && (
+            <Button size="sm" className="gap-1.5" onClick={() => setReviewing(true)}>
+              <RepeatIcon className="size-4" /> Repasar ({queue.total})
+            </Button>
+          )}
+          <Button size="sm" variant={queue && queue.total > 0 ? "outline" : "default"} className="gap-1.5" onClick={() => setShowForm(true)} disabled={showForm}>
+            <PlusIcon className="size-4" /> Nueva entrada
+          </Button>
+        </div>
       </div>
 
       {showForm && <AddFlashcardForm onClose={() => setShowForm(false)} />}
@@ -211,13 +264,28 @@ function FlashcardsTab() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((e) => (
-            <Flashcard key={e.id} id={e.id} term={e.term} definition={e.definition} onRemove={(id) => remove.mutate({ id })} />
+            <Flashcard
+              key={e.id}
+              id={e.id}
+              term={e.term}
+              definition={e.definition}
+              note={e.note}
+              source={e.source}
+              box={e.box}
+              dueAt={new Date(e.dueAt)}
+              now={now}
+              onRemove={(id) => remove.mutate({ id })}
+            />
           ))}
         </div>
       )}
 
       {data.length > 0 && (
-        <p className="text-xs text-muted-foreground text-center">{data.length} {data.length === 1 ? "entrada" : "entradas"}</p>
+        <p className="text-xs text-muted-foreground text-center">
+          {data.length} {data.length === 1 ? "entrada" : "entradas"}
+          {" · "}{data.filter((e) => e.box >= MAX_BOX).length} dominadas
+          {queue && queue.total === 0 && " · Nada pendiente para hoy"}
+        </p>
       )}
     </div>
   );
