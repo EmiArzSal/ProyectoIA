@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# project documentation (kept outside the repository)
+/Documento Técnico*.docx
+/Encuesta Rápida_ Preparación para Entrevistas Laborales en Inglés (ESCOM) (Responses) - Form Responses 1.csv
+/Infografía ¿QUÉ PRESENTARÁS EN TT1.pdf
+/infografia.md
+
+# Office temporary lock files
+~$*

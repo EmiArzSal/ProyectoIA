@@ -1,9 +1,18 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { sendVerificationEmail, sendResetPasswordEmail } from "@/lib/email";
 import { eq } from "drizzle-orm";
+import { INSTITUTIONAL_EMAIL_MESSAGE, isInstitutionalEmail } from "@/lib/institutional-email";
+
+/** Server-side domain rule (RNF06): the form check alone can be bypassed with a direct API call. */
+function assertInstitutionalEmail(email: unknown) {
+  if (typeof email !== "string" || !isInstitutionalEmail(email)) {
+    throw new APIError("BAD_REQUEST", { message: INSTITUTIONAL_EMAIL_MESSAGE });
+  }
+}
 
 export const auth = betterAuth({
   emailAndPassword: {
@@ -35,6 +44,21 @@ export const auth = betterAuth({
           // turn a successful account deletion into an apparent failure.
           console.error("[auth] Could not clean up verification values after account deletion.");
         }
+      },
+    },
+  },
+  // Every way an account is created or its email changed goes through these hooks.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          assertInstitutionalEmail(user.email);
+        },
+      },
+      update: {
+        before: async (data) => {
+          if ("email" in data) assertInstitutionalEmail(data.email);
+        },
       },
     },
   },
