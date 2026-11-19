@@ -20,6 +20,7 @@ import {
   FormMessage,
 } from "@/components/ui/form"
 import Link from "next/link"
+import { INSTITUTIONAL_EMAIL_MESSAGE, isInstitutionalEmail } from "@/lib/institutional-email"
 import Image from "next/image"
 
 const formSchema = z
@@ -28,9 +29,7 @@ const formSchema = z
     email: z
       .string()
       .email({ message: "Ingresa un correo válido" })
-      .refine((email) => email.endsWith("@alumno.ipn.mx"), {
-        message: "Solo se permiten correos institucionales @alumno.ipn.mx",
-      }),
+      .refine(isInstitutionalEmail, { message: INSTITUTIONAL_EMAIL_MESSAGE }),
     password: z
       .string()
       .min(8, { message: "La contraseña debe tener al menos 8 caracteres" }),
