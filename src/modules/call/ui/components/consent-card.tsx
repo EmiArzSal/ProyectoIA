@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LoaderIcon, ShieldCheckIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PRIVACY_PATH } from "@/lib/consent";
 
 interface Props {
@@ -48,12 +49,11 @@ export const ConsentCard = ({ onAccept, accepting }: Props) => {
       </ul>
 
       <label htmlFor={checkboxId} className="flex items-start gap-3 text-sm text-slate-200 cursor-pointer">
-        <input
+        <Checkbox
           id={checkboxId}
-          type="checkbox"
           checked={checked}
-          onChange={(e) => setChecked(e.target.checked)}
-          className="mt-0.5 size-4 accent-blue-500"
+          onCheckedChange={(value) => setChecked(value === true)}
+          className="mt-0.5 border-slate-400 data-[state=checked]:border-blue-500 data-[state=checked]:bg-blue-500"
         />
         <span>
           Entiendo cómo se usan mis datos y acepto el{" "}

@@ -9,7 +9,7 @@ import { authClient } from "@/lib/auth-client"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { ArrowLeft, CheckCircle2Icon, KeyRoundIcon, OctagonAlertIcon, XCircleIcon } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -164,8 +164,7 @@ export const ResetPasswordView = () => {
                         <FormItem>
                           <FormLabel>Nueva contraseña</FormLabel>
                           <FormControl>
-                            <Input
-                              type="password"
+                            <PasswordInput
                               placeholder="Mínimo 8 caracteres"
                               {...field}
                             />
@@ -181,8 +180,7 @@ export const ResetPasswordView = () => {
                         <FormItem>
                           <FormLabel>Confirmar nueva contraseña</FormLabel>
                           <FormControl>
-                            <Input
-                              type="password"
+                            <PasswordInput
                               placeholder="Repite tu contraseña"
                               {...field}
                             />

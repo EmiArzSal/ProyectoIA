@@ -9,6 +9,7 @@ import { authClient } from "@/lib/auth-client"
 import { Alert, AlertTitle } from "@/components/ui/alert"
 import { ArrowLeft, OctagonAlertIcon } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
@@ -148,7 +149,7 @@ export const SignUpView = () => {
                       <FormItem>
                         <FormLabel>Contraseña</FormLabel>
                         <FormControl>
-                          <Input type="password" placeholder="Mínimo 8 caracteres" {...field} />
+                          <PasswordInput placeholder="Mínimo 8 caracteres" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -161,7 +162,7 @@ export const SignUpView = () => {
                       <FormItem>
                         <FormLabel>Confirmar contraseña</FormLabel>
                         <FormControl>
-                          <Input type="password" placeholder="Repite tu contraseña" {...field} />
+                          <PasswordInput placeholder="Repite tu contraseña" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>

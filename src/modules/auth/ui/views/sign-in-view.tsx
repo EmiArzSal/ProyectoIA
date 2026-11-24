@@ -10,6 +10,7 @@ import { Alert, AlertTitle } from "@/components/ui/alert"
 import { ArrowLeft, OctagonAlertIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -126,7 +127,7 @@ export const SignInView = () => {
                       <FormItem>
                         <FormLabel>Contraseña</FormLabel>
                         <FormControl>
-                          <Input type="password" placeholder="********" {...field} />
+                          <PasswordInput placeholder="********" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
