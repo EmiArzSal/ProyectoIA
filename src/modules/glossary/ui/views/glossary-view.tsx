@@ -577,7 +577,7 @@ function DictionaryTab() {
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export function GlossaryView() {
+export function GlossaryView({ initialTab = "flashcards" }: { initialTab?: "flashcards" | "dictionary" }) {
   return (
     <div className="flex-1 py-6 px-4 md:px-8 flex flex-col gap-6">
       {/* Header */}
@@ -592,7 +592,7 @@ export function GlossaryView() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="flashcards">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="rounded-none bg-transparent border-b w-full justify-start h-auto p-0 gap-0">
           {[
             { value: "flashcards", label: "Flashcards" },

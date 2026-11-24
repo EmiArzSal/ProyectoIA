@@ -19,6 +19,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { getAchievement } from "@/lib/achievements";
 import { cn } from "@/lib/utils";
+import { OnboardingChecklist } from "@/modules/onboarding/ui/onboarding-checklist";
 
 export const HomeView = () => {
   const trpc = useTRPC();
@@ -69,6 +70,9 @@ export const HomeView = () => {
           Prepárate para entrevistas técnicas en inglés y refuerza tus conocimientos en tecnología.
         </p>
       </div>
+
+      {/* First steps for new users (hidden once closed) */}
+      <OnboardingChecklist />
 
       {/* Acciones rápidas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

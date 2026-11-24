@@ -9,6 +9,7 @@ import { dictionaryRouter } from '@/modules/dictionary/server/procedures';
 import { gamificationRouter } from '@/modules/gamification/server/procedures';
 import { progressRouter } from '@/modules/progress/server/procedures';
 import { consentRouter } from '@/modules/consent/server/procedures';
+import { onboardingRouter } from '@/modules/onboarding/server/procedures';
 
 export const appRouter = createTRPCRouter({
    agents: agentsRouter,
@@ -19,6 +20,7 @@ export const appRouter = createTRPCRouter({
    gamification: gamificationRouter,
    progress: progressRouter,
    consent: consentRouter,
+   onboarding: onboardingRouter,
 });
 // export type definition of API
 export type AppRouter = typeof appRouter;
