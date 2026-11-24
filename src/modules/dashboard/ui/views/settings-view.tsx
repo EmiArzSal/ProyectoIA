@@ -176,7 +176,7 @@ export const SettingsView = ({ user }: SettingsViewProps) => {
         toast.error("No se pudo cerrar la sesión. Intenta de nuevo.");
         return;
       }
-      router.push("/sign-in");
+      router.push("/");
     } catch {
       toast.error("No se pudo cerrar la sesión. Intenta de nuevo.");
     } finally {
