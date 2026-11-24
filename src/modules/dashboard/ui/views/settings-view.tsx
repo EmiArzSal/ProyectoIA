@@ -5,6 +5,8 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input"
+
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -402,9 +404,8 @@ export const SettingsView = ({ user }: SettingsViewProps) => {
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="delete-account-password">Contraseña actual</Label>
-                      <Input
+                      <PasswordInput
                         id="delete-account-password"
-                        type="password"
                         autoComplete="current-password"
                         value={deletePassword}
                         onChange={(event) => setDeletePassword(event.target.value)}

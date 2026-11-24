@@ -48,3 +48,9 @@ next-env.d.ts
 
 # Office temporary lock files
 ~$*
+
+# diagram sources for the technical document (kept outside the repository)
+/diagramas/
+
+# load-test accounts (never commit credentials)
+/tests/load/cuentas.json
