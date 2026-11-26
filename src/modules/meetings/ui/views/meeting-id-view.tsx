@@ -12,7 +12,6 @@ import { useState } from "react";
 import { UpdateMeetingDialog } from "../components/update-meeting-dialog";
 import { UpcomingState } from "../components/upcoming-state";
 import { ActiveState } from "../components/active-state";
-import { CancelledState } from "../components/cancelled-state";
 import { ProcessingState } from "../components/processing-state";
 import { FailedState } from "../components/failed-state";
 import { CompletedState } from "../components/completed-state";
@@ -57,7 +56,6 @@ export const MeetingIdView =({meetingId}:Props) => {
 
     const isActive = data.status === "active";
     const isCompleted = data.status === "completed";
-    const isCancelled = data.status === "cancelled";
     const isProcessing = data.status === "processing";
     const isFailed = data.status === "failed";
     const isUpcoming = data.status === "upcoming";
@@ -77,7 +75,6 @@ export const MeetingIdView =({meetingId}:Props) => {
             onEdit={()=> setUpdateMeetingDialogOpen(true)}
             onRemove={handleRemoveMeeting}
             />
-            {isCancelled && <CancelledState/>}
             {isCompleted && <CompletedState data={data}/>}
             {isProcessing && <ProcessingState meetingId={meetingId}/>}
             {isFailed && <FailedState meetingId={meetingId}/>}

@@ -18,6 +18,8 @@ export const user = pgTable("user", {
     // accepted; an older version than CONSENT_VERSION must accept again.
     recordingConsentVersion: integer('recording_consent_version'),
     recordingConsentAt: timestamp('recording_consent_at'),
+    // "Primeros pasos" card on the dashboard closed by the user (see modules/onboarding).
+    onboardingDismissedAt: timestamp('onboarding_dismissed_at'),
 });
 
 export const session = pgTable("session", {
@@ -62,7 +64,7 @@ export const verification = pgTable("verification", {
 });
 
 // "failed": the evaluation job ran out of retries; the user can retry it.
-export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing","cancelled", "failed"]);
+export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing", "failed"]);
 
 export const meetings = pgTable("meetings", {
     id: text('id')
