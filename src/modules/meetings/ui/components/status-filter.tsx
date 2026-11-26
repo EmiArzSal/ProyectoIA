@@ -1,5 +1,4 @@
 import {
-    CircleXIcon,
     CircleCheckIcon,
     ClockArrowUpIcon,
     VideoIcon,
@@ -51,16 +50,6 @@ const options = [
         <div className="flex items-center gap-x-2 capitalize">
         <LoaderIcon/>
         {MeetingStatus.Processing}
-        </div>
-    ),
- },
- {
-    id:MeetingStatus.Cancelled,
-    value: MeetingStatus.Cancelled,
-    children:(
-        <div className="flex items-center gap-x-2 capitalize">
-        <CircleXIcon/>
-        {MeetingStatus.Cancelled}
         </div>
     ),
  },

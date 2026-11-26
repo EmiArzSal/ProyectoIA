@@ -64,7 +64,7 @@ export const verification = pgTable("verification", {
 });
 
 // "failed": the evaluation job ran out of retries; the user can retry it.
-export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing","cancelled", "failed"]);
+export const meetingStatus = pgEnum("meeting_status", ["upcoming", "active", "completed", "processing", "failed"]);
 
 export const meetings = pgTable("meetings", {
     id: text('id')

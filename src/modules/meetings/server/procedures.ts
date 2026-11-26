@@ -529,7 +529,6 @@ export const meetingsRouter = createTRPCRouter({
           MeetingStatus.Active,
           MeetingStatus.Completed,
           MeetingStatus.Processing,
-          MeetingStatus.Cancelled,
           MeetingStatus.Failed,
         ]).nullish(),
         period: z.enum(["week", "month", "quarter"]).nullish(),
@@ -553,7 +552,7 @@ export const meetingsRouter = createTRPCRouter({
       const whereConditions = and(
         eq(meetings.userId, ctx.auth.user.id),
         search ? ilike(meetings.name, `%${search}%`) : undefined,
-        status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "cancelled" | "failed") : undefined,
+        status ? eq(meetings.status, status.toLowerCase() as "upcoming" | "active" | "completed" | "processing" | "failed") : undefined,
         agentId ? eq(meetings.agentId, agentId) : undefined,
         fromDate ? gte(meetings.createdAt, fromDate) : undefined,
       );

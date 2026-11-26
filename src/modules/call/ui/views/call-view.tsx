@@ -42,9 +42,6 @@ export const CallView = ({ meetingId }: Props) => {
   if (meeting.status === "completed") {
     return <Finished title="Esta entrevista ya finalizó" description="Puedes ver el resumen en el historial de entrevistas" />;
   }
-  if (meeting.status === "cancelled") {
-    return <Finished title="Entrevista cancelada" description="Esta entrevista fue cancelada" />;
-  }
   if (session.initialStatus === "processing" || session.initialStatus === "failed") {
     return <Finished title="Esta entrevista ya finalizó" description="Estamos generando tu reporte; puedes verlo en el historial de entrevistas" />;
   }
