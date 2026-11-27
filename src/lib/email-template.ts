@@ -3,11 +3,11 @@
 //
 // Email clients ignore most CSS, so the HTML uses tables, inline styles and
 // bgcolor attributes. Every email also carries a plain-text version.
+//
+// The logo mark is drawn with HTML (a blue tile with an "A"), not an image:
+// Outlook, which serves @alumno.ipn.mx, blocks external images by default.
 
 export const BRAND_BLUE = "#516bb7";
-
-/** Published at /email/agora-logo.png (96 px, shown at 48 px for sharp screens). */
-export const LOGO_PATH = "/email/agora-logo.png";
 
 export type EmailContent = {
   /** Hidden line shown by inboxes next to the subject. */
@@ -17,7 +17,7 @@ export type EmailContent = {
   name?: string | null;
   intro: string;
   ctaLabel: string;
-  /** Link the button opens. Its origin is also where the logo is served from. */
+  /** Link the button opens. */
   url: string;
   /** e.g. "El enlace vence en 24 horas." */
   expiry: string;
@@ -46,7 +46,6 @@ function greeting(name?: string | null): string {
 }
 
 export function renderEmail(content: EmailContent): { html: string; text: string } {
-  const logoUrl = new URL(LOGO_PATH, content.url).toString();
   const e = escapeHtml;
 
   const html = `<!DOCTYPE html>
@@ -67,10 +66,8 @@ export function renderEmail(content: EmailContent): { html: string; text: string
               <td style="padding:32px 32px 0;font-family:Arial,Helvetica,sans-serif;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
-                    <td style="vertical-align:middle;">
-                      <img src="${e(logoUrl)}" width="48" height="48" alt="Agora" style="display:block;width:48px;height:48px;border:0;outline:none;text-decoration:none;color:${BRAND_BLUE};font-size:14px;font-weight:bold;">
-                    </td>
-                    <td style="vertical-align:middle;padding-left:12px;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;letter-spacing:1px;color:#1f2937;">AGORA</td>
+                    <td width="44" height="44" align="center" valign="middle" bgcolor="${BRAND_BLUE}" style="width:44px;height:44px;background-color:${BRAND_BLUE};border-radius:10px;font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:44px;font-weight:bold;color:#ffffff;text-align:center;">A</td>
+                    <td style="vertical-align:middle;padding-left:14px;font-family:Arial,Helvetica,sans-serif;font-size:18px;font-weight:bold;letter-spacing:1px;color:#1f2937;">AGORA</td>
                   </tr>
                 </table>
               </td>

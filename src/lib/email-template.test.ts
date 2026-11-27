@@ -29,11 +29,9 @@ test("the user's name cannot inject HTML", () => {
   assert.ok(html.includes("Hola, &lt;script&gt;alert(1)&lt;/script&gt;."));
 });
 
-test("the logo is served from the link's origin", () => {
+test("the email has no images, so Outlook has nothing to block", () => {
   const { html } = renderEmail(base);
-  assert.ok(html.includes(`src="https://agora-hub.vercel.app/email/agora-logo.png"`));
-  const local = renderEmail({ ...base, url: "http://localhost:3000/api/auth/verify-email?token=x" });
-  assert.ok(local.html.includes(`src="http://localhost:3000/email/agora-logo.png"`));
+  assert.ok(!html.includes("<img"));
 });
 
 test("the link is escaped in attributes and kept intact in the text version", () => {
