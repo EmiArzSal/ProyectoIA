@@ -19,14 +19,16 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: true,
     sendResetPassword: async ({ user, url }) => {
-      await sendResetPasswordEmail(user.email, url);
+      await sendResetPasswordEmail(user.email, url, user.name);
     },
   },
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
+    // The email says the link lasts 24 hours (Better Auth's default is 1 hour).
+    expiresIn: 60 * 60 * 24,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendVerificationEmail(user.email, url);
+      await sendVerificationEmail(user.email, url, user.name);
     },
   },
   user: {

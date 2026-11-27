@@ -68,7 +68,7 @@ export const SignUpView = () => {
     setError(null)
     setIsPending(true)
     authClient.signUp.email(
-      { name: data.name, email: data.email, password: data.password, callbackURL: "/" },
+      { name: data.name, email: data.email, password: data.password, callbackURL: "/email-verified" },
       {
         onSuccess: () => {
           setIsPending(false)
