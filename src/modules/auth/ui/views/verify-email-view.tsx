@@ -27,7 +27,7 @@ export const VerifyEmailView = () => {
   const handleResend = async () => {
     if (!email || resending || resent) return;
     setResending(true);
-    await authClient.sendVerificationEmail({ email, callbackURL: "/dashboard" });
+    await authClient.sendVerificationEmail({ email, callbackURL: "/email-verified" });
     setResending(false);
     setResent(true);
   };
